@@ -1,0 +1,1005 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Classroom Attention Cues — Instructor Dashboard</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --line:#252a34; --txt:#e6e9ef;
+    --muted:#8b93a3; --ok:#3ddc84; --warn:#ffb454; --alert:#ff5f56; --accent:#6aa9ff;
+  }
+  @media (prefers-color-scheme: light){
+    :root{ --bg:#f5f6f8; --panel:#fff; --line:#e2e5ea; --txt:#1a1d23;
+           --muted:#5c6472; --accent:#2563eb; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+       font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  header{padding:14px 20px;border-bottom:1px solid var(--line);
+         display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+  h1{font-size:17px;margin:0;font-weight:600}
+  .pill{font-size:12px;padding:3px 10px;border-radius:20px;
+        background:var(--panel);border:1px solid var(--line);color:var(--muted)}
+  .live{color:var(--ok)} .live::before{content:"● "}
+  .wrap{display:grid;grid-template-columns:minmax(0,2fr) minmax(300px,1fr);
+        gap:16px;padding:16px;align-items:start}
+  @media(max-width:900px){.wrap{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);
+        border-radius:10px;padding:14px;min-width:0}
+  .card h2{font-size:12px;text-transform:uppercase;letter-spacing:.06em;
+           color:var(--muted);margin:0 0 10px}
+  #frame{width:100%;border-radius:8px;display:block;background:#000}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:10px}
+  .kpi{background:var(--bg);border:1px solid var(--line);border-radius:8px;
+       padding:10px;text-align:center}
+  .kpi b{display:block;font-size:22px;line-height:1.2}
+  .kpi span{font-size:11px;color:var(--muted)}
+  table{width:100%;border-collapse:collapse}
+  th,td{text-align:left;padding:6px 4px;border-bottom:1px solid var(--line);font-size:13px}
+  th{color:var(--muted);font-weight:500;font-size:11px;text-transform:uppercase}
+  .cue{padding:2px 8px;border-radius:12px;font-size:12px;white-space:nowrap}
+  .c-screen_oriented{background:rgba(61,220,132,.15);color:var(--ok)}
+  .c-looking_away,.c-turned_to_peer{background:rgba(255,180,84,.15);color:var(--warn)}
+  .c-head_down,.c-phone_use{background:rgba(255,95,86,.15);color:var(--alert)}
+  .c-uncertain{background:rgba(139,147,163,.15);color:var(--muted)}
+  /* Not a class: a tracked student before the model's first prediction (~10 s
+     at the trained 1 Hz). Dashed and unfilled so it never reads as a cue or as
+     an abstention. */
+  .c-warming_up{background:transparent;color:var(--muted);border:1px dashed var(--line)}
+  /* cue9 / cue7. Without these the four classes screen_oriented was split into
+     rendered as an unstyled chip while their BOXES drew in the fallback grey --
+     the same grey an abstention uses. Kept in the cool half of the palette
+     (all four are on-task) but distinct from each other, because telling them
+     apart is the entire reason for the split. Matches CUE_COLOUR in
+     session_replay.py, which draws the boxes. */
+  .c-using_laptop{background:rgba(132,220,61,.15);color:var(--ok)}
+  .c-reading{background:rgba(90,210,180,.15);color:#5ad2b4}
+  .c-listening{background:rgba(70,170,220,.15);color:#46aadc}
+  .c-writing_notes{background:rgba(200,235,120,.15);color:#c8eb78}
+  .c-engaged{background:rgba(80,190,200,.15);color:#50bec8}
+  .c-on_task{background:rgba(61,220,132,.15);color:var(--ok)}
+  .c-off_task,.c-down_or_hidden{background:rgba(255,95,86,.15);color:var(--alert)}
+  #alerts{list-style:none;margin:0;padding:0;max-height:260px;overflow:auto}
+  #alerts li{padding:8px 10px;border-left:3px solid var(--alert);
+             background:var(--bg);border-radius:0 6px 6px 0;margin-bottom:6px}
+  #alerts time{color:var(--muted);font-size:11px;display:block}
+  .empty{color:var(--muted);font-style:italic;padding:12px 0}
+  canvas{width:100%;height:90px;display:block}
+  footer{padding:10px 20px;color:var(--muted);font-size:11px;
+         border-top:1px solid var(--line)}
+  .scroll{overflow-x:auto}
+  select{width:100%;padding:8px 10px;border-radius:8px;background:var(--bg);
+         color:var(--txt);border:1px solid var(--line);font:inherit;font-size:13px}
+  select:disabled{opacity:.55;cursor:not-allowed}
+  .spec{width:100%;font-size:12px}
+  .spec td{border:0;padding:3px 0;vertical-align:top}
+  .spec td:first-child{color:var(--muted);white-space:nowrap;padding-right:10px;width:1%}
+  .note{font-size:11px;color:var(--muted);margin:10px 0 0;line-height:1.45}
+  .banner{font-size:12px;padding:8px 10px;border-radius:8px;margin-top:10px;
+          background:rgba(255,180,84,.12);border:1px solid rgba(255,180,84,.35);
+          color:var(--warn)}
+  .banner.err{background:rgba(255,95,86,.12);border-color:rgba(255,95,86,.35);
+              color:var(--alert)}
+  .switching{opacity:.5;pointer-events:none}
+  .thr{display:flex;gap:8px;align-items:center;margin:8px 0 0}
+  .thr span{min-width:5.5em}
+  .thr input{flex:1 1 auto}
+  .thr b{min-width:3ch;text-align:right;color:var(--text,inherit)}
+  button{font:inherit;font-size:13px;padding:7px 12px;border-radius:8px;
+         border:1px solid var(--line);background:var(--bg);color:var(--txt);
+         cursor:pointer}
+  button:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover:not(:disabled){opacity:.9;color:#fff}
+  .row{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+  .row > *{flex:1 1 auto}
+  .drop{margin-top:10px;padding:16px;border:1.5px dashed var(--line);
+        border-radius:10px;text-align:center;color:var(--muted);font-size:12px;
+        cursor:pointer;transition:border-color .15s,color .15s}
+  .drop:hover,.drop.over{border-color:var(--accent);color:var(--accent)}
+  .bar{height:6px;border-radius:4px;background:var(--bg);overflow:hidden;
+       border:1px solid var(--line);margin-top:8px}
+  .bar > i{display:block;height:100%;background:var(--accent);width:0;
+           transition:width .4s}
+  .badge{font-size:10px;padding:1px 6px;border-radius:10px;margin-left:6px;
+         border:1px solid var(--line);color:var(--muted)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Classroom Attention Cues</h1>
+  <span class="pill" id="status">connecting…</span>
+  <span class="pill" id="clock">t = 0.0 s</span>
+  <span class="pill" id="src"></span>
+  <span class="pill" id="modelpill"></span>
+  <span class="pill" id="capture"></span>
+</header>
+
+<div class="wrap">
+  <div style="display:grid;gap:16px;min-width:0">
+    <div class="card">
+      <h2>Live view</h2>
+      <img id="frame" alt="live classroom view">
+      <p class="empty" id="noframe">No video frame (cue-log replay shows cue data only).</p>
+      <div id="runerror"></div>
+    </div>
+
+    <div class="card">
+      <h2>Class overview</h2>
+      <div class="kpis">
+        <div class="kpi"><b id="k-students">–</b><span>students</span></div>
+        <div class="kpi"><b id="k-off">–</b><span>off-task now</span></div>
+        <div class="kpi"><b id="k-pct">–</b><span>% off-task</span></div>
+        <div class="kpi"><b id="k-alerts">–</b><span>alerts</span></div>
+      </div>
+      <h2 style="margin-top:14px">Off-task fraction over time</h2>
+      <canvas id="spark" width="600" height="90"></canvas>
+    </div>
+
+    <div class="card scroll">
+      <h2>Per-student cues</h2>
+      <table>
+        <thead><tr><th>Seat</th><th>Visible cue</th><th>Duration</th><th>Confidence</th></tr></thead>
+        <tbody id="students"></tbody>
+      </table>
+      <p class="empty" id="nostudents">No students detected yet.</p>
+    </div>
+  </div>
+
+  <div style="display:grid;gap:16px;min-width:0">
+    <div class="card" id="sourcecard">
+      <h2>Recording</h2>
+      <select id="sourcesel"><option>loading…</option></select>
+      <div class="row">
+        <button id="btn-play">Play</button>
+        <button id="btn-analyse" class="primary">Analyse</button>
+      </div>
+      <div id="dropzone" class="drop">
+        Drop a recording here, or click to choose a file
+        <input type="file" id="fileinput" accept="video/*" hidden>
+      </div>
+      <div id="jobwrap" style="display:none">
+        <div class="bar"><i id="jobbar"></i></div>
+        <div class="row" style="align-items:center">
+          <span id="jobmsg" class="note" style="margin:0;flex:1 1 100%"></span>
+          <button id="btn-cancel">Cancel</button>
+        </div>
+      </div>
+      <div id="sourcebanner"></div>
+      <p class="note" id="sourcenote"></p>
+    </div>
+
+    <div class="card" id="cameracard" style="display:none">
+      <h2>Live camera</h2>
+      <div class="row">
+        <button id="btn-cam-start" class="primary">Start camera</button>
+        <button id="btn-cam-stop" disabled>Stop</button>
+      </div>
+      <video id="campreview" playsinline muted
+             style="width:100%;border-radius:8px;margin-top:10px;display:none;
+                    transform:scaleX(-1)"></video>
+      <canvas id="camcanvas" hidden></canvas>
+      <table class="spec"><tbody id="camstats"></tbody></table>
+      <div id="camerabanner"></div>
+      <p class="note" id="cameranote"></p>
+    </div>
+
+    <div class="card" id="modelcard">
+      <h2>Model</h2>
+      <select id="modelsel" disabled><option>loading…</option></select>
+      <label class="note" style="display:flex;gap:6px;align-items:center;margin:6px 0 0">
+        <input type="checkbox" id="showall"> show all trained variants
+        <span id="allcount"></span>
+      </label>
+      <table class="spec"><tbody id="modelspec"></tbody></table>
+      <div id="thrwrap" style="display:none">
+        <p class="note" style="margin:10px 0 0">Confidence per cue. Each slider
+          starts at this model's calibrated value and resets whenever you pick a
+          model or a recording. A cue is shown when <em>its own</em> confidence
+          reaches its slider, even if another cue ranks first.</p>
+        <div id="thrcues"></div>
+        <div class="row"><button id="btn-thr-reset" disabled>Reset to calibrated</button></div>
+        <div id="thrbanner"></div>
+      </div>
+      <div id="modelbanner"></div>
+      <p class="note" id="modelnote"></p>
+    </div>
+
+    <div class="card">
+      <h2>Alerts</h2>
+      <ul id="alerts"></ul>
+      <p class="empty" id="noalerts">No sustained off-task episodes.</p>
+    </div>
+  </div>
+</div>
+
+<footer>
+  Reports <strong>visible behavioural cues</strong> only — e.g. “head down for 45 s”.
+  It does not infer attention, engagement, or any mental state. Alerts require a
+  sustained episode, not a single frame. Students appear as seat numbers; no
+  identity or demographic data is processed.
+</footer>
+
+<script>
+// Resolve API URLs against the page, not the server root.
+//
+// Absolute "/api/state" only works when the dashboard is served at "/". Behind a
+// path-prefixing reverse proxy — JupyterHub serves it at
+// /user/<name>/proxy/8080/, which is how this runs on the HPC — the browser
+// sends /api/state to the hub rather than to us, so every call 404s while the
+// page itself loads fine. Resolving against document.baseURI works at the root
+// and under any prefix.
+// ...but baseURI is only a DIRECTORY when the URL ends in a slash. Open
+// /proxy/8010 without it and the browser resolves "api/sources" against the
+// parent, i.e. /proxy/api/sources, which the hub answers with its own 404 --
+// so the page renders, every call fails, and the dashboard reports itself
+// disconnected while the 404 never reaches this server at all. This page is
+// always served at a path root, so a missing trailing slash is always a typo
+// and is safe to supply.
+const api = p => {
+  const base = new URL(document.baseURI);
+  if (!base.pathname.endsWith("/")) base.pathname += "/";
+  return new URL(p, base).href;
+};
+
+function fmt(s){ s=Math.round(s); return s<60 ? s+"s" : Math.floor(s/60)+"m "+(s%60)+"s"; }
+function f4(x){ return (x==null||isNaN(x)) ? "—" : Number(x).toFixed(4); }
+
+function drawSpark(hist){
+  const c=document.getElementById("spark"), x=c.getContext("2d");
+  const W=c.width, H=c.height;
+  x.clearRect(0,0,W,H);
+  if(!hist.length) return;
+  const css=getComputedStyle(document.documentElement);
+  x.strokeStyle=css.getPropertyValue("--line"); x.lineWidth=1;
+  [0.25,0.5,0.75].forEach(f=>{ x.beginPath(); x.moveTo(0,H*f); x.lineTo(W,H*f); x.stroke(); });
+  x.beginPath();
+  hist.forEach((p,i)=>{
+    const px=(i/Math.max(hist.length-1,1))*W, py=H-(p[1]*H);
+    i?x.lineTo(px,py):x.moveTo(px,py);
+  });
+  x.strokeStyle=css.getPropertyValue("--accent"); x.lineWidth=2; x.stroke();
+  x.lineTo(W,H); x.lineTo(0,H); x.closePath();
+  x.fillStyle="rgba(106,169,255,.12)"; x.fill();
+}
+
+/* ---------------- recording picker ---------------- */
+
+let SOURCES=null, LAST_JOB="";
+
+const $ = (id)=>document.getElementById(id);
+
+// Error text can carry an uploaded filename, which came from a browser. It is
+// already restricted by sources.safe_name, but escaping at the point of
+// insertion is the check that does not depend on that staying true.
+function esc(t){
+  return String(t).replace(/[&<>"']/g, c => ({
+    "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
+}
+
+function sourceBanner(text, isError){
+  $("sourcebanner").innerHTML = text
+    ? `<div class="banner${isError?" err":""}">${text}</div>` : "";
+}
+
+function selectedSource(){
+  return (SOURCES?.sources||[]).find(s=>s.id===$("sourcesel").value);
+}
+
+async function loadSources(){
+  // Without this the picker keeps its "loading..." placeholder forever when
+  // the call fails, which reads as a slow server rather than a broken one.
+  // /api/sources returned 502 for a whole session that way.
+  let r;
+  try{
+    r = await fetch(api("api/sources"),{cache:"no-store"});
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    SOURCES = await r.json();
+  }catch(e){
+    $("sourcesel").innerHTML = "<option>unavailable</option>";
+    // The camera panel is revealed below, once this call succeeds. Returning
+    // early leaves it display:none, so a failure here does not just break the
+    // recordings list -- it removes live capture from the page entirely, with
+    // nothing to say it was ever there. That reads as "this build has no camera
+    // mode" rather than "the page cannot reach its server".
+    let why = ". The server logged the reason.";
+    if(String(e.message).includes("404")){
+      // A 404 on the API, when the page itself loaded, almost always means the
+      // request never reached this server: behind a path prefix like
+      // /proxy/8010 with no trailing slash, "api/sources" resolves against the
+      // PARENT and the proxy answers 404 on its own. Nothing is logged here,
+      // so pointing at the log sends people to an empty file.
+      why = ". The page loaded but the API did not answer, so the request "
+          + "probably never reached the server — check the address ends in a "
+          + "slash (…/proxy/8010/, not …/proxy/8010).";
+    }
+    sourceBanner("Could not list recordings: "+esc(e.message) + why
+      + " Live camera is hidden until this succeeds.", true);
+    return;
+  }
+  const sel=$("sourcesel"), keep=sel.value;
+  sel.innerHTML="";
+
+  const ready = SOURCES.sources.filter(s=>s.kind==="session");
+  const raw   = SOURCES.sources.filter(s=>s.kind==="video");
+
+  if(ready.length){
+    const g=document.createElement("optgroup");
+    g.label="Analysed — instant playback, models switch freely";
+    ready.forEach(s=>{
+      const o=document.createElement("option");
+      o.value=s.id;
+      o.textContent=`${s.name} — ${s.n_frames} frames, ${s.n_tracks} students`
+                  + (s.saved?" · saved":"");
+      g.appendChild(o);
+    });
+    sel.appendChild(g);
+  }
+  if(raw.length){
+    const g=document.createElement("optgroup");
+    g.label="Not analysed — needs a full pipeline pass";
+    raw.forEach(s=>{
+      const o=document.createElement("option");
+      o.value=s.id;
+      o.textContent=`${s.name} — ${s.size_mb} MB`
+                  + (s.ready?" (analysed)":"");
+      g.appendChild(o);
+    });
+    sel.appendChild(g);
+  }
+  if(!SOURCES.sources.length){
+    sel.innerHTML = "<option>no recordings yet</option>";
+  }
+
+  // The camera card needs the detector, and nothing else — the frames come from
+  // the viewer, not from this machine, so there is no device to discover.
+  const camOk = !!SOURCES.camera_enabled;
+  $("cameracard").style.display = camOk ? "" : "none";
+  if(camOk){
+    $("cameranote").innerHTML =
+      "Captured in <strong>your browser</strong> and sent frame by frame to the "
+      + "server, which runs the detector, the tracker and the selected model, and "
+      + "sends the frame back with the boxes drawn on it. The panel on the left is "
+      + "that analysed feed; the small preview is your raw camera. "
+      + "<strong>Video leaves your machine.</strong> Frames are held only long "
+      + "enough to analyse and are not written to disk. Needs https, or "
+      + "http on localhost.";
+  }
+  sel.value = SOURCES.active || keep || sel.value;
+
+  $("dropzone").style.display = SOURCES.upload_enabled ? "" : "none";
+  $("sourcenote").innerHTML = SOURCES.can_analyse
+    ? "<strong>Analyse</strong> runs the detector, tracker and features once and "
+    + "caches them. After that, playback needs no detector and switching models "
+    + "is instant. <strong>Play</strong> on an un-analysed recording streams it "
+    + "through the whole pipeline instead — slower, and a model switch restarts it."
+    + (SOURCES.persist_enabled
+       ? " Analysed recordings are saved, and are back in this list after the "
+       + "Space restarts or wakes from sleep (give it a minute after boot)."
+       : "")
+    : "Started without a detector config, so recordings cannot be analysed or "
+    + "streamed. Only already-built sessions and cue logs will play.";
+  refreshSourceButtons();
+}
+
+function refreshSourceButtons(){
+  const s = selectedSource(), job = LAST_JOB==="running";
+  $("btn-play").disabled    = !s || job;
+  $("btn-analyse").disabled = !s || job || s.kind!=="video"
+                              || s.ready || !SOURCES?.can_analyse;
+  $("btn-analyse").textContent =
+      (s && s.kind==="video" && s.ready) ? "Already analysed" : "Analyse";
+}
+
+$("sourcesel").addEventListener("change", refreshSourceButtons);
+
+$("btn-play").addEventListener("click", async ()=>{
+  const s = selectedSource();
+  if(!s) return;
+  sourceBanner("");
+  try{
+    const r = await fetch(api("api/source"),{method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({source_id:s.id})});
+    const j = await r.json();
+    if(!r.ok) throw new Error(j.error||r.statusText);
+  }catch(e){ sourceBanner("Could not play: "+e.message, true); }
+});
+
+$("btn-analyse").addEventListener("click", async ()=>{
+  const s = selectedSource();
+  if(!s) return;
+  sourceBanner("");
+  try{
+    const r = await fetch(api("api/analyse"),{method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({source_id:s.id})});
+    const j = await r.json();
+    if(!r.ok) throw new Error(j.error||r.statusText);
+  }catch(e){ sourceBanner("Could not analyse: "+e.message, true); }
+});
+
+$("btn-cancel").addEventListener("click", ()=>fetch(api("api/cancel"),{method:"POST"}));
+
+/* upload: the raw file as the request body, no multipart. A lecture recording
+   is streamed to disk on the server rather than buffered. */
+const dz=$("dropzone"), fi=$("fileinput");
+dz.addEventListener("click", ()=>fi.click());
+dz.addEventListener("dragover", e=>{e.preventDefault(); dz.classList.add("over");});
+dz.addEventListener("dragleave", ()=>dz.classList.remove("over"));
+dz.addEventListener("drop", e=>{
+  e.preventDefault(); dz.classList.remove("over");
+  if(e.dataTransfer.files.length) upload(e.dataTransfer.files[0]);
+});
+fi.addEventListener("change", ()=>{ if(fi.files.length) upload(fi.files[0]); });
+
+function upload(file){
+  sourceBanner(`Uploading ${file.name} (${(file.size/1e6).toFixed(1)} MB)…`, false);
+  const xhr = new XMLHttpRequest();
+  xhr.open("POST", "/api/upload?name="+encodeURIComponent(file.name));
+  xhr.upload.onprogress = e=>{
+    if(e.lengthComputable)
+      sourceBanner(`Uploading ${file.name} — ${Math.round(100*e.loaded/e.total)}%`, false);
+  };
+  xhr.onload = async ()=>{
+    let j={}; try{ j=JSON.parse(xhr.responseText); }catch(_){}
+    if(xhr.status>=400){ sourceBanner("Upload failed: "+(j.error||xhr.status), true); return; }
+    sourceBanner(`${j.name} uploaded — press Analyse to build a session.`, false);
+    await loadSources();
+    $("sourcesel").value = j.id;
+    refreshSourceButtons();
+  };
+  xhr.onerror = ()=>sourceBanner("Upload failed: network error", true);
+  xhr.send(file);
+}
+
+function renderJob(job){
+  const wrap=$("jobwrap"), status=job?.status||"";
+  if(!status || status==="idle"){ wrap.style.display="none"; }
+  else{
+    wrap.style.display="";
+    $("jobbar").style.width = (job.pct||0)+"%";
+    $("jobmsg").textContent = `${status}: ${job.name||""} — ${job.message||""}`;
+    $("btn-cancel").disabled = status!=="running";
+  }
+  if(status!==LAST_JOB){
+    LAST_JOB = status;
+    refreshSourceButtons();
+    // "saving": the new session is already playing while it copies to storage,
+    // so list it now rather than when the copy finishes.
+    if(["saving","done","cancelled","failed"].includes(status)) loadSources();
+  }
+}
+
+/* ---------------- live camera ----------------
+
+   The dashboard runs on the GPU host; the camera is in front of whoever has
+   this page open. So the capture happens HERE, in the browser, and frames are
+   POSTed one at a time to /api/camera/frame. The analysed frame — boxes, cue
+   labels and all — comes back through the same /api/state the rest of the page
+   already polls, so the video panel needs no special case.
+
+   The small preview is the RAW camera, mirrored the way a mirror is, purely so
+   the user can see they are in shot. The panel above it is the analysed feed
+   and is not mirrored, because the boxes are in source coordinates.
+
+   Pacing: one frame in flight at a time, and the next capture is scheduled only
+   after the previous POST returns. That makes the browser push at exactly the
+   rate the server can absorb, instead of queueing frames the pipeline will drop
+   anyway. `CAM_TARGET_MS` is a floor, not a rate.                          */
+
+let CAM_STREAM=null, CAM_TIMER=null, CAM_BUSY=false;
+const CAM_TARGET_MS = 100;        // never faster than 10/s
+const CAM_WIDTH = 960;            // matches the width the server re-encodes to
+
+function camBanner(text, isError){
+  const b=$("camerabanner");
+  b.innerHTML = text ? `<div class="banner${isError?" err":""}">${text}</div>` : "";
+}
+
+function camStats(o){
+  $("camstats").innerHTML = Object.entries(o)
+    .map(([k,v])=>`<tr><td>${k}</td><td>${v}</td></tr>`).join("");
+}
+
+async function camStart(){
+  camBanner("");
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    camBanner("This browser exposes no camera API. Camera capture needs a "
+      + "secure context — https, or http on localhost.", true);
+    return;
+  }
+  try{
+    CAM_STREAM = await navigator.mediaDevices.getUserMedia({
+      video:{width:{ideal:1280}, height:{ideal:720}}, audio:false});
+  }catch(e){
+    // The three real causes, named, because "NotAllowedError" tells the user
+    // nothing about which one they hit.
+    camBanner("Camera unavailable: " + e.name + ". Either permission was "
+      + "denied, no camera is attached, or the page is not on a secure origin "
+      + "(https or localhost).", true);
+    return;
+  }
+  const v=$("campreview");
+  v.srcObject = CAM_STREAM; v.style.display="block";
+  await v.play().catch(()=>{});
+
+  // Point the server at the browser camera. It starts the pipeline, which then
+  // waits on the first pushed frame.
+  try{
+    const r = await fetch(api("api/source"),{method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({source_id: SOURCES?.camera_id || "camera:browser"})});
+    const j = await r.json();
+    if(!r.ok) throw new Error(j.error||r.statusText);
+  }catch(e){
+    camBanner("Could not start the pipeline: "+e.message, true);
+    camStop(); return;
+  }
+
+  $("btn-cam-start").disabled=true; $("btn-cam-stop").disabled=false;
+  camStats({status:"streaming", sent:0, dropped:0});
+  camLoop();
+}
+
+function camStop(){
+  if(CAM_TIMER){ clearTimeout(CAM_TIMER); CAM_TIMER=null; }
+  if(CAM_STREAM){ CAM_STREAM.getTracks().forEach(t=>t.stop()); CAM_STREAM=null; }
+  const v=$("campreview"); v.srcObject=null; v.style.display="none";
+  $("btn-cam-start").disabled=false; $("btn-cam-stop").disabled=true;
+  // No "stop" call to the server: it notices the frames stopped and ends the
+  // run on its own idle timeout, which is also what happens if this tab is
+  // closed or crashes. One path, so the crash case is the tested one.
+  camStats({status:"stopped — the server ends the run when frames stop"});
+}
+
+function camLoop(){
+  if(!CAM_STREAM) return;
+  CAM_TIMER = setTimeout(async ()=>{
+    if(!CAM_BUSY) await camSend();
+    camLoop();
+  }, CAM_TARGET_MS);
+}
+
+async function camSend(){
+  const v=$("campreview");
+  if(!v.videoWidth) return;                  // not ready yet
+  CAM_BUSY=true;
+  try{
+    const c=$("camcanvas");
+    const w=Math.min(CAM_WIDTH, v.videoWidth);
+    c.width=w; c.height=Math.round(w * v.videoHeight / v.videoWidth);
+    c.getContext("2d").drawImage(v,0,0,c.width,c.height);
+    const blob = await new Promise(res=>c.toBlob(res,"image/jpeg",0.7));
+    if(!blob) return;
+    const r = await fetch(api("api/camera/frame"),
+      {method:"POST", headers:{"Content-Type":"image/jpeg"}, body:blob});
+    const j = await r.json();
+    if(!r.ok) throw new Error(j.error||r.statusText);
+    camStats({status: j.status || "streaming",
+              sent:j.received, analysed:j.processed,
+              // Dropped frames are NORMAL once analysis is flowing: the pipeline
+              // is slower than the camera, so it skips rather than falls behind.
+              // Before the first frame is analysed they mean something else
+              // entirely, which is why `status` is shown rather than inferred.
+              "skipped (kept current)":j.dropped});
+    // The server distinguishes "keeping up", "still loading the detector" and
+    // "nothing is reading these frames". Only the last is a problem, and it is
+    // the one that used to be invisible.
+    if(j.consuming === false && j.processed === 0){
+      camBanner(j.status + (j.error ? " — " + j.error : ""), !/warming up/.test(j.status||""));
+    } else {
+      camBanner("");
+    }
+  }catch(e){
+    camBanner("Camera frame rejected: "+e.message, true);
+  }finally{ CAM_BUSY=false; }
+}
+
+$("btn-cam-start").addEventListener("click", camStart);
+$("btn-cam-stop").addEventListener("click", camStop);
+window.addEventListener("pagehide", camStop);
+
+/* ---------------- model selector ---------------- */
+
+let MODELS=null, SWITCHING=false;
+
+function optionLabel(m){
+  const val = f4(m.val && m.val.macro_f1);
+  // The class count and the coverage travel WITH the number, always. A bare
+  // (measured value removed from the handover copy)
+  // docs/LABELS.md forbids: the first is 2 classes at 91% coverage, the second
+  // is 6 at 100%.
+  const scope = `${m.n_classes||6} cls`
+      + (m.coverage!=null && m.coverage<0.999
+         ? ` @ ${(100*m.coverage).toFixed(0)}% cov` : "");
+  return `${m.label}  ·  val macro-F1 ${val} (${scope})  ·  ${m.sweep_label}`;
+}
+
+/* Groups, in the order they are offered. The canonical 6-cue target comes
+   first and is the only group the server will default to; the others are
+   offered but can never win a ranking they are not in. */
+/* Groups are ordered by HOW THE LABEL SPACE TREATS `screen_oriented`, because
+   that is the substantive difference between these models — it is 75.7% of the
+   corpus and covers four visibly different behaviours.
+
+   Each group is also a COMPARABILITY group: macro-F1 is only comparable inside
+   one. That constraint is why "everything that still predicts screen_oriented"
+   is three groups rather than one — a 6-class model and a 3-class abstaining
+   model cannot be ranked against each other (docs/LABELS.md), so they are
+   listed adjacently and labelled rather than merged. */
+const MODEL_GROUPS = [
+  {key:"cue9",
+   test:m=>m.taxonomy==="cue9",
+   label:"◆ SPLIT — 9 classes: screen_oriented replaced by writing_notes / "
+        +"using_laptop / reading / listening"},
+
+  {key:"canonical",
+   test:m=>m.is_canonical,
+   label:"▸ Still predicts screen_oriented — 6 cue classes, the thesis target"},
+  {key:"alttarget",
+   test:m=>!m.is_canonical && m.taxonomy==="cue6",
+   label:"▸ Still predicts screen_oriented — 6 classes, different training "
+        +"target (cue ruleset v2 / partial labels). Comparable to each other, "
+        +"not to the group above"},
+  {key:"coarse3",
+   test:m=>m.taxonomy==="coarse3_reliable",
+   label:"▸ Still predicts screen_oriented — 3 classes, abstains on the two "
+        +"gaze-ambiguous cues. A different, easier task"},
+
+  {key:"onoff",
+   test:m=>m.taxonomy==="onoff"||m.taxonomy==="onoff_reliable",
+   label:"▹ screen_oriented RENAMED, not removed — 2 classes, on_task is "
+        +"exactly {screen_oriented}. A different, easier task"},
+
+  {key:"other",
+   test:m=>!["cue9","cue6","coarse3_reliable","onoff","onoff_reliable"]
+            .includes(m.taxonomy),
+   label:"Other taxonomies"},
+];
+
+async function loadModels(){
+  const r = await fetch(api("api/models"),{cache:"no-store"});
+  MODELS = await r.json();
+  const sel = document.getElementById("modelsel");
+  sel.innerHTML = "";
+
+  if(!MODELS.models.length){
+    sel.innerHTML = "<option>no model (cue-log replay)</option>";
+    sel.disabled = true;
+    document.getElementById("modelnote").textContent =
+      "A recorded cue log stores decisions, not features, so there is no model to swap.";
+    return;
+  }
+
+  // Default view is the curated shortlist: the best model per taxonomy. The
+  // other ~30 are seeds of ablations whose conclusions are already written
+  // down, and showing them all buries the handful anyone would actually run.
+  // Nothing is deleted — the checkbox reveals them.
+  const showAll = $("showall").checked;
+  const pool = showAll ? MODELS.models
+                       : MODELS.models.filter(m=>m.recommended);
+  const live = pool.filter(m=>m.live_capable!==false);
+  const dead = pool.filter(m=>m.live_capable===false);
+  $("allcount").textContent =
+      showAll ? `(showing all ${MODELS.models.length})`
+              : `(showing ${pool.length} of ${MODELS.models.length})`;
+  // On a cached session a model reading the head block cannot run: the cache
+  // holds base + head pose only. Disable it here rather than let the switch
+  // fail server-side.
+  const onSession = MODELS.source_kind==="session";
+
+  MODEL_GROUPS.forEach(g=>{
+    const rows = live.filter(g.test);
+    if(!rows.length) return;
+    const og=document.createElement("optgroup");
+    og.label=g.label;
+    rows.forEach(m=>{
+      const o=document.createElement("option");
+      o.value=m.variant_id;
+      const blocked = onSession && m.replay_capable===false;
+      o.textContent=optionLabel(m) + (blocked ? "  — needs live video" : "");
+      if(m.recommended_why) o.title = m.recommended_why;
+      if(blocked){ o.disabled=true; o.title=m.blocked_reason; }
+      og.appendChild(o);
+    });
+    sel.appendChild(og);
+  });
+
+  if(dead.length){
+    const g2=document.createElement("optgroup");
+    // These read feature blocks no live path can produce: `express` needs a
+    // second per-crop FER model, `dynamic` is a whole-track statistic. They stay
+    // listed, disabled, with the reason on hover — hiding them would make the
+    // feature ablation look smaller than it was.
+    g2.label="✕ Trained but not runnable live — needs facial-expression or "
+            +"whole-track motion features the streaming path cannot produce";
+    dead.forEach(m=>{
+      const o=document.createElement("option");
+      o.value=m.variant_id; o.disabled=true;
+      o.textContent=optionLabel(m)+"  — unavailable live";
+      o.title=m.blocked_reason;
+      g2.appendChild(o);
+    });
+    sel.appendChild(g2);
+  }
+
+  sel.disabled = !MODELS.switchable;
+  if(MODELS.active) sel.value = MODELS.active;
+  document.getElementById("modelnote").innerHTML =
+    (MODELS.switchable
+      ? `Switching restarts the session under the selected checkpoint — ${MODELS.switch_cost}. `
+      : "This source cannot switch models. ") +
+    "Each entry is the <strong>best validation seed</strong> of its variant; " +
+    "the test column is shown but never ranks anything. Models are grouped by " +
+    "what they were <strong>asked to predict</strong> — macro-F1 is only " +
+    "comparable inside a group, so a 2-class score and a 9-class score on this " +
+    "list are answers to different questions.";
+}
+
+$("showall").addEventListener("change", ()=>loadModels());
+
+document.getElementById("modelsel").addEventListener("change", async (ev)=>{
+  const id = ev.target.value;
+  SWITCHING = true;
+  document.getElementById("modelcard").classList.add("switching");
+  banner("Switching to "+id+"…", false);
+  try{
+    const r = await fetch(api("api/model"),{
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({variant_id:id})});
+    const j = await r.json();
+    if(!r.ok) throw new Error(j.error || r.statusText);
+    banner("", false);
+  }catch(e){
+    banner("Could not switch: "+e.message, true);
+    if(MODELS && MODELS.active) ev.target.value = MODELS.active;
+  }finally{
+    SWITCHING = false;
+    document.getElementById("modelcard").classList.remove("switching");
+  }
+});
+
+function banner(text, isError){
+  const b=document.getElementById("modelbanner");
+  b.innerHTML = text ? `<div class="banner${isError?" err":""}">${text}</div>` : "";
+}
+
+function vlmBanner(students){
+  // The VLM takes about a minute to load and the demo session is ~64 s of
+  // video, so on a first selection the replay can finish before the first
+  // opinion exists. Saying so beats showing an absent opinion as though the
+  // model had considered the frame and declined to answer.
+  const loading = Object.values(students||{}).some(s=>s.vlm_loading);
+  const el = document.getElementById("modelbanner");
+  if(loading && el && !el.innerHTML){
+    el.innerHTML = '<div class="banner">VLM still loading — cues are the '
+      + 'temporal model alone until it is ready. Re-select this model once it '
+      + 'has loaded to see the fused opinion.</div>';
+  }
+}
+
+function renderModelSpec(m, notice){
+  const tb=document.getElementById("modelspec");
+  if(!m || !m.variant_id){ tb.innerHTML=""; document.getElementById("modelpill").textContent=""; return; }
+  document.getElementById("modelpill").textContent = m.label;
+
+  const vm=m.val_seed_mean||{}, tm=m.test_seed_mean||{};
+  const seedMean=(o)=> o.macro_f1==null ? "—"
+      : `${f4(o.macro_f1)} ± ${f4(o.macro_f1_sd)} (${o.n} seeds)`;
+
+  const nCls = m.n_classes || 6;
+  const cov = m.taxonomy_coverage==null ? 1 : m.taxonomy_coverage;
+  const impure = m.off_task_impure || {};
+  const impureNames = Object.keys(impure);
+
+  const rows=[
+    ["checkpoint", `${m.experiment_id} · seed ${m.seed} of ${m.n_seeds}`],
+    // What it predicts, before any number about how well. A macro-F1 with no
+    // class count beside it is the comparison docs/LABELS.md warns against.
+    ["predicts", `<strong>${nCls}</strong> classes (${m.taxonomy||"cue6"})`
+        + (m.class_names && m.class_names.length
+           ? `: ${m.class_names.join(", ").replace(/_/g," ")}` : "")],
+    ...(cov < 0.999 ? [["coverage",
+        `<strong>${(100*cov).toFixed(1)}%</strong> of validation frames — this `
+      + `taxonomy abstains on ${(m.abstains_on||[]).join(", ").replace(/_/g," ")}`
+      + `, so its macro-F1 is over ${nCls} classes on the easier ${(100*cov).toFixed(0)}%`]] : []),
+    ["macro-F1, val", `<strong>${f4(m.val_macro_f1)}</strong> &nbsp; this seed`],
+    ["", `${seedMean(vm)} &nbsp; variant mean, as reported`],
+    ["macro-F1, test", m.test_macro_f1==null ? "not evaluated on test"
+        : `${f4(m.test_macro_f1)} &nbsp; this seed`],
+    ["head pose", m.head_pose_backend==="mediapipe_detector"
+        ? "BlazeFace detector (face-found flag)"
+        : "FaceLandmarker mesh (angles + flag)"],
+    ["display ≥", m.display_threshold==null ? "—"
+        : `${Number(m.display_threshold).toFixed(2)} — below this the chip reads “uncertain”`],
+    ["alerts", m.alerts_enabled===false ? "<strong>disabled for this model</strong>"
+        : (m.alert_threshold==null ? "—"
+           : `confidence ≥ ${Number(m.alert_threshold).toFixed(2)}`)],
+    // Every model is held to the same 85% alert precision, so the thing that
+    // actually varies is how much of the class it can say anything about.
+    ["alert coverage", m.alert_coverage==null ? "—"
+        : `<strong>${(100*m.alert_coverage).toFixed(1)}%</strong> of frames, at `
+        + `${(100*(m.alert_selective_accuracy??0)).toFixed(1)}% precision`],
+    // A merged class may alert only when every cue it merges is independently
+    // alertable, so a class mixing an actionable cue with `uncertain` pages
+    // nobody. Say which classes can, rather than leaving it to be discovered.
+    ...(m.alert_dwell ? [["alerts on",
+        Object.keys(m.alert_dwell).length
+          ? Object.entries(m.alert_dwell)
+              .map(([k,v])=>`${k.replace(/_/g," ")} after ${v}s`).join(", ")
+          : "<strong>no class</strong> — every off-task class of this taxonomy "
+            + "merges “uncertain”, which is not evidence of being off task"]] : []),
+    ...(impureNames.length ? [["off-task %",
+        `counts <strong>${impureNames.join(", ").replace(/_/g," ")}</strong>, which merges `
+      + `${Object.values(impure)[0].join(", ").replace(/_/g," ")} — it includes students `
+      + `who could not be seen, so this percentage is not comparable to the six-cue one`]] : []),
+  ];
+  tb.innerHTML = rows.map(([k,v])=>`<tr><td>${k}</td><td>${v}</td></tr>`).join("");
+  if(notice && !SWITCHING) banner(notice, false);
+}
+
+/* ---------------- per-cue confidence sliders ---------------- */
+// One slider per class of the RUNNING model. A cue is shown when its own
+// probability reaches its slider, even when another class ranks first; if several
+// qualify, the one furthest above its slider wins. With every slider at the
+// calibrated display threshold this is exactly the calibrated rule. Alerts
+// still need the calibrated alert threshold on the cue that is shown. The server
+// resets them whenever a run starts -- a model switch, a source change, or Play --
+// so a new model always opens on its own calibrated values.
+
+let THR_DRAGGING=false, THR_ERROR="", THR_CLASSES="";
+const thrLabel = v => v>1 ? "off" : Number(v).toFixed(2);
+
+function buildCueSliders(classes){
+  const box=$("thrcues"); box.innerHTML="";
+  for(const c of classes){
+    const lab=document.createElement("label");
+    lab.className="note thr";
+    lab.innerHTML=`<span><span class="cue c-${esc(c)}">${esc(c.replace(/_/g," "))}</span></span>`
+      + `<input type="range" min="0.05" max="0.95" step="0.01"><b></b>`;
+    const el=lab.querySelector("input"), out=lab.querySelector("b");
+    el.dataset.cue=c;
+    el.addEventListener("input", ()=>{ THR_DRAGGING=true; out.textContent=Number(el.value).toFixed(2); });
+    el.addEventListener("change", ()=>postThresholds({cues:{[c]: Number(el.value)}}));
+    box.appendChild(lab);
+  }
+}
+
+function renderThresholds(t){
+  const wrap=$("thrwrap");
+  if(!t || !t.classes || !t.classes.length){ wrap.style.display="none"; THR_CLASSES=""; return; }
+  wrap.style.display="";
+  const key=t.classes.join(",");
+  if(key!==THR_CLASSES){ buildCueSliders(t.classes); THR_CLASSES=key; }
+  if(!THR_DRAGGING){
+    for(const el of $("thrcues").querySelectorAll("input")){
+      const v=t.cues[el.dataset.cue];
+      el.value=v;
+      el.nextElementSibling.textContent=Number(v).toFixed(2);
+      // Bold the cues whose slider differs from the calibrated value.
+      el.parentElement.style.fontWeight = Math.abs(v - t.display) > 1e-9 ? "600" : "";
+    }
+  }
+  $("btn-thr-reset").disabled = !t.overridden;
+  const pill=$("modelpill");
+  if(t.overridden){
+    pill.textContent += " · custom thresholds";
+    pill.style.color="var(--warn)";
+  } else pill.style.color="";
+  $("thrbanner").innerHTML = THR_ERROR
+    ? `<div class="banner err">Could not change thresholds: ${esc(THR_ERROR)}</div>`
+    : t.overridden
+      ? `<div class="banner">Custom confidence levels (calibrated: ${thrLabel(t.display)} for every cue). `
+        + `A lowered slider also shows that cue on students who do not have it, and nothing here `
+        + `measures how often. ↑ in the table marks a cue shown by its slider, not as the top choice. `
+        + `Alerts still need confidence ≥ ${thrLabel(t.alert)} on the cue shown. `
+        + `Resets when a model or recording is selected, or Play is pressed.</div>`
+      : "";
+}
+
+async function postThresholds(body){
+  try{
+    const r = await fetch(api("api/thresholds"),{method:"POST",
+      headers:{"Content-Type":"application/json"}, body: JSON.stringify(body)});
+    const j = await r.json();
+    if(!r.ok) throw new Error(j.error || r.statusText);
+    THR_ERROR="";
+  }catch(e){ THR_ERROR=e.message; }
+  finally{ THR_DRAGGING=false; }
+}
+
+$("btn-thr-reset").addEventListener("click", ()=>postThresholds({reset:true}));
+
+/* ---------------- polling ---------------- */
+
+async function tick(){
+  try{
+    const r = await fetch(api("api/state"),{cache:"no-store"});
+    const s = await r.json();
+    vlmBanner(s.students);
+
+    document.getElementById("status").textContent = s.running ? "live" : "idle";
+    document.getElementById("status").className = "pill" + (s.running?" live":"");
+    document.getElementById("clock").textContent = "t = " + s.t.toFixed(1) + " s";
+    document.getElementById("src").textContent = s.source || "";
+
+    const img=document.getElementById("frame"), nf=document.getElementById("noframe");
+    if(s.frame){ img.src="data:image/jpeg;base64,"+s.frame; img.style.display="block"; nf.style.display="none"; }
+    else { img.style.display="none"; nf.style.display="block"; }
+
+    // A run that died leaves running=false and no frame, which looks exactly
+    // like one that was never started. Say which it was.
+    document.getElementById("runerror").innerHTML = s.error
+      ? `<div class="banner err">Playback stopped: ${esc(s.error)}</div>` : "";
+
+    const cs=s.class_summary||{};
+    document.getElementById("k-students").textContent = cs.n_students ?? "–";
+    document.getElementById("k-off").textContent      = cs.off_task ?? "–";
+    document.getElementById("k-pct").textContent      = (cs.off_task_pct ?? "–")+(cs.off_task_pct!=null?"%":"");
+    document.getElementById("k-alerts").textContent   = (s.alerts||[]).length;
+
+    const tb=document.getElementById("students"); tb.innerHTML="";
+    const seats=Object.keys(s.students||{}).sort((a,b)=>a-b);
+    document.getElementById("nostudents").style.display = seats.length?"none":"block";
+    for(const seat of seats){
+      const st=s.students[seat];
+      const tr=document.createElement("tr");
+      tr.innerHTML = `<td>${seat}</td>`+
+        `<td><span class="cue c-${st.cue}"${st.warming?' title="no prediction yet: the model needs a few seconds of this student first"':st.rescued?' title="shown by its confidence slider; another cue ranked first"':""}>`+
+        `${st.cue.replace(/_/g," ")}${st.rescued?" ↑":""}</span></td>`+
+        `<td>${st.warming?"—":fmt(st.dwell||0)}</td>`+
+        `<td>${st.conf==null?"—":Number(st.conf).toFixed(2)}</td>`;
+      tb.appendChild(tr);
+    }
+
+    const ul=document.getElementById("alerts"); ul.innerHTML="";
+    const al=(s.alerts||[]).slice().reverse();
+    document.getElementById("noalerts").style.display = al.length?"none":"block";
+    for(const a of al){
+      const li=document.createElement("li");
+      li.innerHTML=`<time>t = ${a.t}s</time>${a.text}`;
+      ul.appendChild(li);
+    }
+    drawSpark(s.history||[]);
+
+    // A live source drops frames when the pipeline cannot keep up. Saying so is
+    // the point: an overlay that looks current and is not is worse than one
+    // labelled as running behind.
+    const cap=s.capture||{}, cp=document.getElementById("capture");
+    if(cap.live){
+      cp.textContent = `${cap.processed_fps} fps processed · ${cap.drop_pct}% of `
+                     + `${cap.source_fps} fps camera dropped`;
+      cp.style.color = cap.drop_pct >= 90 ? "var(--alert)"
+                     : cap.drop_pct >= 50 ? "var(--warn)" : "";
+    } else { cp.textContent=""; cp.style.color=""; }
+
+    renderJob(s.job);
+    if(SOURCES && s.source_id && SOURCES.active!==s.source_id){
+      SOURCES.active = s.source_id;
+      if(selectedSource()===undefined || $("sourcesel").value!==s.source_id){
+        $("sourcesel").value = s.source_id;
+        refreshSourceButtons();
+      }
+    }
+
+    renderModelSpec(s.model, s.notice);
+    renderThresholds(s.thresholds);
+    if(MODELS && s.model && s.model.variant_id && MODELS.active!==s.model.variant_id){
+      MODELS.active = s.model.variant_id;
+      if(!SWITCHING) document.getElementById("modelsel").value = s.model.variant_id;
+    }
+  }catch(e){
+    document.getElementById("status").textContent="disconnected";
+    document.getElementById("status").className="pill";
+  }
+}
+
+loadSources();
+loadModels();
+tick(); setInterval(tick, 1000);
+</script>
+</body>
+</html>

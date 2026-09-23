@@ -1,0 +1,664 @@
+{
+  "schema": "llmstu_artifacts_lock.v1",
+  "generated": "2026-08-09",
+  "generated_by": "Reproducibility/Release agent, branch-c/overt-cue",
+  "status_values": {
+    "public": "A live, currently-fetchable public URL or hub reference exists; bootstrap.py may download it automatically for any profile that lists it, subject to --offline/--no-download.",
+    "manual": "No automatic fetch path exists yet (source.kind='unpublished' or 'manual') -- a human must generate or place the file. bootstrap.py will never invent a URL for these; it prints the producer command or manual-placement instructions instead.",
+    "restricted": "An automatic fetch path may or may not exist, but access is legally/ethically gated (derived from the restricted LLMSTU corpus, see RISK 1). bootstrap.py refuses to auto-fetch these under any profile, regardless of --offline/--no-download, and prints why."
+  },
+  "notes": [
+    "This file catalogues the artifacts the RUNTIME code path (dashboard + attention/ package) actually references by path or model id, plus the two named project-generated checkpoints and the detector checkpoint they depend on transitively -- it is not a re-listing of all 458 training checkpoints already inventoried in docs/branch_c/ARTIFACT_MANIFEST.json (that remains the fuller, audit-phase inventory of everything on disk).",
+    "verified=true means this agent computed/cross-checked the sha256 (or, for HTTP sources, the remote Content-Length and/or a content hash header) itself on 2026-08-09 without inventing any value. verified=false + sha256=null means neither was possible without a full download, which this task's rules forbid; see verification_note on each such entry for exactly what would close the gap.",
+    "redistribution.permitted uses a 3-state enum -- 'yes' / 'no' / 'pending_ethics_review' -- because several artifacts derived from the restricted LLMSTU corpus cannot be honestly marked yes or no today; [internal notes, not included] RISK 1.",
+    "destination paths are relative to cache_root, which DEFAULTS TO THE REPOSITORY ROOT ITSELF -- not a separate ~/.cache directory -- because existing runtime code (LLMDet/configs/attention_runtime.yaml, LLMDet/attention/head_pose.py DEFAULT_MODEL constants) hardcodes these exact paths relative to the repo (e.g. '../huggingface/mediapipe/...' from LLMDet/). Set LLMSTU_CACHE_ROOT only if you also intend to update those configs yourself; bootstrap.py will warn if it detects a non-default cache root combined with a profile that needs one of these path-sensitive artifacts."
+  ],
+  "cache_root_env": "LLMSTU_CACHE_ROOT",
+  "cache_root_default": ".",
+  "profiles": {
+    "demo": {
+      "description": "Clone and run the dashboard against already-tracked precomputed session logs (tools/dashboard/demo_session.jsonl, live_session*.jsonl) and run the deployed temporal model (checkpoint.mstcn_553_ff_s42) on CPU. No GPU, no restricted dataset, no detector.",
+      "guarantees": "The dashboard server starts, serves the UI, and replays a precomputed session end to end. The deployed MS-TCN checkpoint and its calibration thresholds are present and loadable. Does NOT let you point the dashboard at a new video -- that needs the detector + mediapipe + CLIP (the 'research' profile) and there is no publicly shippable sample video to try it on (see docs/REPRODUCIBILITY.md)."
+    },
+    "research": {
+      "description": "Everything in 'demo', plus the full live pipeline (detector + tracker + CLIP + head-pose) so a researcher can run their OWN video through the pipeline end to end, on CPU or GPU, without the restricted LLMSTU dataset.",
+      "guarantees": "Can run tools/dashboard/precompute_session.py / pipeline_bridge.py against an arbitrary user-supplied video. Cannot reproduce the thesis's own reported numbers (those require the restricted LLMSTU corpus, splits, and gold annotations -- 'full-data')."
+    },
+    "full-data": {
+      "description": "Everything in 'research', plus the restricted LLMSTU dataset itself (grounding_data/LLMSTU, sequence caches, splits, gold annotations) for whoever already holds institutional access to it.",
+      "guarantees": "Can reproduce the thesis's reported evaluation numbers (attention/thesis_eval) and re-run the full 6-sweep checkpoint comparison. This profile's data artifacts are status=restricted: bootstrap.py will never fetch them automatically over the network -- it prints where they must be placed manually by someone with existing access."
+    },
+    "hpc": {
+      "description": "Everything in 'full-data', plus the pretrained init weights and configs needed to retrain the detector or the temporal-model sweeps from scratch on a multi-GPU cluster.",
+      "guarantees": "Can re-run LLMDet/tools/train.py and attention/thesis_eval/launch_sweep.py from the same init weights this project used. Training is not bit-reproducible across hardware/CUDA versions; results match within reported seed variance, not byte-for-byte. Respects this project's own 'max 4 GPUs at once' operating constraint if followed by the operator -- bootstrap.py does not launch training itself, only stages the artifacts training needs."
+    }
+  },
+  "artifacts": [
+    {
+      "id": "weights.sixdrepnet360.full_rotation",
+      "version": "1.0.0",
+      "purpose": "Full-range (>90deg yaw) head-pose backbone. Named in LLMDet/attention/head_pose.py as the escalation path over MediaPipe for LLMSTU's rear/three-quarter camera angles [internal notes, not included] SS12.1 point 4). Not currently wired into attention_runtime.yaml -- the deployed backend is 'mediapipe_detector'.",
+      "owner": {
+        "branch": "C",
+        "config": "LLMDet/attention/head_pose.py (escalation path, not yet default)"
+      },
+      "type": "model_weights",
+      "source": {
+        "kind": "http",
+        "url": "https://cloud.ovgu.de/s/TewGC9TDLGgKkmS/download/6DRepNet360_Full-Rotation_300W_LP%2BPanoptic.pth"
+      },
+      "upstream": {
+        "repo": "https://github.com/thohemp/6DRepNet360",
+        "ref": null,
+        "note": "Author-hosted direct-download link, not a tagged GitHub release asset; no commit/tag pin is available from the host itself."
+      },
+      "license": {
+        "spdx": "MIT",
+        "note": "Verified in [internal notes, not included] against the upstream repo's LICENSE.MD."
+      },
+      "redistribution": {
+        "permitted": "yes",
+        "note": "MIT permits redistribution. Not currently mirrored by this project; recipe (URL + hash) only, per policy of not mirroring upstream weights unnecessarily."
+      },
+      "status": "public",
+      "bytes": 94397849,
+      "sha256": "3ee08f1e04b8d452a6c4a40926a6f38051894ae6d0aaa6d191fe6d8bc6e4f9c6",
+      "verified": true,
+      "verification_note": "Re-hashed locally on 2026-08-09 from the file already present at huggingface/sixdrepnet360/; matches exactly the hash on record from the original download.",
+      "destination": "huggingface/sixdrepnet360/6DRepNet360_Full-Rotation_300W_LP+Panoptic.pth",
+      "profiles": [
+        "research",
+        "full-data",
+        "hpc"
+      ],
+      "extract": {
+        "method": "none"
+      },
+      "producer": null,
+      "deprecated": {
+        "is_deprecated": false,
+        "reason": null,
+        "superseded_by": null
+      }
+    },
+    {
+      "id": "model.clip_vit_base_patch32",
+      "version": "hf:3d74acf9a28c67741b2f4f2ea7635f0aaf6f0268",
+      "purpose": "Appearance-embedding backbone for per-student CLIP features (LLMDet/attention/features.py FeatureExtractor). Live dependency of the full detect->track->feature pipeline path, not of session replay.",
+      "owner": {
+        "branch": "B/C",
+        "config": "LLMDet/attention/features.py:71 clip_model_name default; LLMDet/configs/attention_runtime.yaml features.clip_model_name"
+      },
+      "type": "huggingface_hub_model",
+      "source": {
+        "kind": "huggingface_hub",
+        "repo_id": "openai/clip-vit-base-patch32",
+        "revision": "3d74acf9a28c67741b2f4f2ea7635f0aaf6f0268"
+      },
+      "upstream": {
+        "repo": "https://huggingface.co/openai/clip-vit-base-patch32",
+        "ref": "3d74acf9a28c67741b2f4f2ea7635f0aaf6f0268",
+        "note": "Pinned to the exact revision resolved locally as 'main' on 2026-08-09; confirmed live via a HEAD request to /resolve/main/config.json, which 307-redirected to this same revision hash."
+      },
+      "license": {
+        "spdx": "MIT",
+        "note": "Verified in [internal notes, not included] from both the GitHub repo and the HF model card."
+      },
+      "redistribution": {
+        "permitted": "yes",
+        "note": "MIT; not mirrored by this project, only the revision is pinned."
+      },
+      "status": "public",
+      "bytes": 605247071,
+      "sha256": "a63082132ba4f97a80bea76823f544493bffa8082296d62d71581a4feff1576f",
+      "verified": true,
+      "verification_note": "sha256 computed directly from the local huggingface_hub cache blob (~/.cache/huggingface/hub/models--openai--clip-vit-base-patch32/blobs/...); huggingface_hub names LFS blobs by their own sha256, and the filename matches the recomputed hash exactly, which is self-consistent. The 'main' ref's identity was re-confirmed live over the network on 2026-08-09 (HEAD to /resolve/main/config.json -> 307 to this exact revision). The weight blob itself was NOT re-fetched over the network this session (blocked by sandbox tooling on a second HEAD attempt) -- treat this hash as 'measured from a real local file', not as independently re-verified against a fresh network download.",
+      "destination": null,
+      "profiles": [
+        "research",
+        "full-data",
+        "hpc"
+      ],
+      "extract": {
+        "method": "none"
+      },
+      "producer": null,
+      "deprecated": {
+        "is_deprecated": false,
+        "reason": null,
+        "superseded_by": null
+      },
+      "files": [
+        {
+          "filename": "pytorch_model.bin",
+          "sha256": "a63082132ba4f97a80bea76823f544493bffa8082296d62d71581a4feff1576f",
+          "bytes": 605247071
+        },
+        {
+          "filename": "config.json",
+          "sha256": "b575ef3c36f2a057fa19e221650105052d61cc9c1a972ec15019c6261ec98770",
+          "bytes": 4186
+        }
+      ],
+      "destination_note": "Managed entirely by the huggingface_hub cache (default ~/.cache/huggingface/hub), NOT copied under cache_root. transformers.CLIPModel.from_pretrained()/CLIPProcessor.from_pretrained() resolve and cache it lazily on first use; bootstrap.py can optionally pre-warm it via huggingface_hub.snapshot_download(revision=pinned) when huggingface_hub + network are available."
+    },
+    {
+      "id": "asset.mediapipe.face_landmarker.task",
+      "version": "1.0.0",
+      "purpose": "MediaPipe face_landmarker.task model asset used by LLMDet/attention/head_pose.py.",
+      "owner": {
+        "branch": "B/C",
+        "config": "LLMDet/attention/head_pose.py DEFAULT_MODEL = '../huggingface/mediapipe/face_landmarker.task...'"
+      },
+      "type": "model_weights",
+      "source": {
+        "kind": "http",
+        "url": "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task"
+      },
+      "upstream": {
+        "repo": "https://github.com/google-ai-edge/mediapipe",
+        "ref": null,
+        "note": "Google-hosted model asset (GCS), not a GitHub tag/commit; MediaPipe's own model cards are the provenance record."
+      },
+      "license": {
+        "spdx": "Apache-2.0",
+        "note": "Verified in [internal notes, not included] against the mediapipe repo and the model's own card."
+      },
+      "redistribution": {
+        "permitted": "yes",
+        "note": "Apache-2.0; not mirrored, recipe (URL+hash) only."
+      },
+      "status": "public",
+      "bytes": 3758596,
+      "sha256": "64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff",
+      "verified": true,
+      "verification_note": "sha256 computed locally; Content-Length (3758596) AND the GCS x-goog-hash MD5 header (sOcnSQehZEQE/vZrKN1thQ==) were both cross-checked live via HEAD on 2026-08-09 and match the local file's size and MD5 exactly -- full integrity confirmed without downloading the body.",
+      "destination": "huggingface/mediapipe/face_landmarker.task",
+      "profiles": [
+        "research",
+        "full-data",
+        "hpc"
+      ],
+      "extract": {
+        "method": "none"
+      },
+      "producer": null,
+      "deprecated": {
+        "is_deprecated": false,
+        "reason": null,
+        "superseded_by": null
+      }
+    },
+    {
+      "id": "asset.mediapipe.face_detection_full_range.tflite",
+      "version": "1.0.0",
+      "purpose": "MediaPipe face_detection_full_range.tflite model asset used by LLMDet/attention/head_pose.py.",
+      "owner": {
+        "branch": "B/C",
+        "config": "LLMDet/attention/head_pose.py DEFAULT_MODEL = '../huggingface/mediapipe/face_detection_full_range.tflite...'"
+      },
+      "type": "model_weights",
+      "source": {
+        "kind": "http",
+        "url": "https://storage.googleapis.com/mediapipe-assets/face_detection_full_range.tflite"
+      },
+      "upstream": {
+        "repo": "https://github.com/google-ai-edge/mediapipe",
+        "ref": null,
+        "note": "Google-hosted model asset (GCS), not a GitHub tag/commit; MediaPipe's own model cards are the provenance record."
+      },
+      "license": {
+        "spdx": "Apache-2.0",
+        "note": "Verified in [internal notes, not included] against the mediapipe repo and the model's own card."
+      },
+      "redistribution": {
+        "permitted": "yes",
+        "note": "Apache-2.0; not mirrored, recipe (URL+hash) only."
+      },
+      "status": "public",
+      "bytes": 1083786,
+      "sha256": "3698b18f063835bc609069ef052228fbe86d9c9a6dc8dcb7c7c2d69aed2b181b",
+      "verified": true,
+      "verification_note": "sha256 computed locally; Content-Length (1083786) AND the GCS x-goog-hash MD5 header (XeN2/MhVJzxccgdm02UjoA==) were both cross-checked live via HEAD on 2026-08-09 and match exactly -- full integrity confirmed without downloading the body.",
+      "destination": "huggingface/mediapipe/face_detection_full_range.tflite",
+      "profiles": [
+        "research",
+        "full-data",
+        "hpc"
+      ],
+      "extract": {
+        "method": "none"
+      },
+      "producer": null,
+      "deprecated": {
+        "is_deprecated": false,
+        "reason": null,
+        "superseded_by": null
+      }
+    },
+    {
+      "id": "asset.mediapipe.blaze_face_short_range.tflite",
+      "version": "1.0.0",
+      "purpose": "MediaPipe blaze_face_short_range.tflite model asset used by LLMDet/attention/head_pose.py.",
+      "owner": {
+        "branch": "B/C",
+        "config": "LLMDet/attention/head_pose.py DEFAULT_MODEL = '../huggingface/mediapipe/blaze_face_short_range.tflite...'"
+      },
+      "type": "model_weights",
+      "source": {
+        "kind": "http",
+        "url": "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite"
+      },
+      "upstream": {
+        "repo": "https://github.com/google-ai-edge/mediapipe",
+        "ref": null,
+        "note": "Google-hosted model asset (GCS), not a GitHub tag/commit; MediaPipe's own model cards are the provenance record."
+      },
+      "license": {
+        "spdx": "Apache-2.0",
+        "note": "Verified in [internal notes, not included] against the mediapipe repo and the model's own card."
+      },
+      "redistribution": {
+        "permitted": "yes",
+        "note": "Apache-2.0; not mirrored, recipe (URL+hash) only."
+      },
+      "status": "public",
+      "bytes": 229746,
+      "sha256": "b4578f35940bf5a1a655214a1cce5cab13eba73c1297cd78e1a04c2380b0152f",
+      "verified": true,
+      "verification_note": "sha256 computed locally; Content-Length (229746) AND the GCS x-goog-hash MD5 header (o91uwxclKQdwuXzsDL+UyQ==) were both cross-checked live via HEAD on 2026-08-09 and match exactly -- full integrity confirmed without downloading the body.",
+      "destination": "huggingface/mediapipe/blaze_face_short_range.tflite",
+      "profiles": [
+        "research",
+        "full-data",
+        "hpc"
+      ],
+      "extract": {
+        "method": "none"
+      },
+      "producer": null,
+      "deprecated": {
+        "is_deprecated": false,
+        "reason": null,
+        "superseded_by": null
+      }
+    },
+    {
+      "id": "weights.mm_grounding_dino.swin-t_pretrain_obj365_goldg_grit9m_v3det",
+      "version": "1.0.0",
+      "purpose": "MM-Grounding-DINO pretrained checkpoint, used as load_from init weights for LLMDet detector training configs.",
+      "owner": {
+        "branch": "A",
+        "config": "LLMDet/configs/grounding_dino_swin_swin-t.py load_from"
+      },
+      "type": "model_weights",
+      "source": {
+        "kind": "http",
+        "url": "https://download.openmmlab.com/mmdetection/v3.0/mm_grounding_dino/grounding_dino_swin-t_pretrain_obj365_goldg_grit9m_v3det/grounding_dino_swin-t_pretrain_obj365_goldg_grit9m_v3det_20231204_095047-b448804b.pth"
+      },
+      "upstream": {
+        "repo": "https://github.com/open-mmlab/mmdetection/tree/main/configs/mm_grounding_dino",
+        "ref": null,
+        "note": "Exact URL already documented in LLMDet/README.md SS'Prepare Grounding-DINO checkpoints'; not independently rediscovered here."
+      },
+      "license": {
+        "spdx": "Apache-2.0",
+        "note": "Verified in [internal notes, not included]; same LICENSE as mmdetection. Weight provenance caveat: trained on Objects365/GoldG/GRIT/V3Det with no separate weight license stated by the release -- code permitted, weight provenance is the field-standard caveat, not a hard blocker (see LICENSE_AUDIT.md SS1 MM-Grounding-DINO row)."
+      },
+      "redistribution": {
+        "permitted": "yes",
+        "note": "Apache-2.0 code license; standard open-vocab-detection weight-provenance caveat noted above. Not mirrored by this project; recipe only."
+      },
+      "status": "public",
+      "bytes": 1093815743,
+      "sha256": "b448804bb1af6fa688887f0f2454625edbeeae4e868bc95620e3e6413581051a",
+      "verified": true,
+      "verification_note": "sha256 computed locally from the file already present at huggingface/mm_grounding_dino/grounding_dino_swin-t_pretrain_obj365_goldg_grit9m_v3det_20231204_095047-b448804b.pth; Content-Length cross-checked live via HEAD against download.openmmlab.com on 2026-08-09 and matches exactly. The filename's trailing 8 hex characters (b448804b) match the head of the computed sha256, consistent with mmdetection's own release-asset naming convention (an independent internal check, not a claim about the naming scheme being a security guarantee).",
+      "destination": "huggingface/mm_grounding_dino/grounding_dino_swin-t_pretrain_obj365_goldg_grit9m_v3det_20231204_095047-b448804b.pth",
+      "profiles": [
+        "research",
+        "full-data",
+        "hpc"
+      ],
+      "extract": {
+        "method": "none"
+      },
+      "producer": null,
+      "deprecated": {
+        "is_deprecated": false,
+        "reason": null,
+        "superseded_by": null
+      }
+    },
+    {
+      "id": "weights.mm_grounding_dino.swin-b_pretrain_obj365_goldg_v3det",
+      "version": "1.0.0",
+      "purpose": "MM-Grounding-DINO pretrained checkpoint, used as load_from init weights for LLMDet detector training configs.",
+      "owner": {
+        "branch": "A",
+        "config": "LLMDet/configs/grounding_dino_swin_swin-b.py load_from"
+      },
+      "type": "model_weights",
+      "source": {
+        "kind": "http",
+        "url": "https://download.openmmlab.com/mmdetection/v3.0/mm_grounding_dino/grounding_dino_swin-b_pretrain_obj365_goldg_v3det/grounding_dino_swin-b_pretrain_obj365_goldg_v3de-f83eef00.pth"
+      },
+      "upstream": {
+        "repo": "https://github.com/open-mmlab/mmdetection/tree/main/configs/mm_grounding_dino",
+        "ref": null,
+        "note": "Exact URL already documented in LLMDet/README.md SS'Prepare Grounding-DINO checkpoints'; not independently rediscovered here."
+      },
+      "license": {
+        "spdx": "Apache-2.0",
+        "note": "Verified in [internal notes, not included]; same LICENSE as mmdetection. Weight provenance caveat: trained on Objects365/GoldG/GRIT/V3Det with no separate weight license stated by the release -- code permitted, weight provenance is the field-standard caveat, not a hard blocker (see LICENSE_AUDIT.md SS1 MM-Grounding-DINO row)."
+      },
+      "redistribution": {
+        "permitted": "yes",
+        "note": "Apache-2.0 code license; standard open-vocab-detection weight-provenance caveat noted above. Not mirrored by this project; recipe only."
+      },
+      "status": "public",
+      "bytes": 1118853462,
+      "sha256": "f83eef00c8ee52b4c628ad1c47e1fb56315c19c74b22bce040d37012c752b587",
+      "verified": true,
+      "verification_note": "sha256 computed locally from the file already present at huggingface/mm_grounding_dino/grounding_dino_swin-b_pretrain_obj365_goldg_v3de-f83eef00.pth; Content-Length cross-checked live via HEAD against download.openmmlab.com on 2026-08-09 and matches exactly. The filename's trailing 8 hex characters (f83eef00) match the head of the computed sha256, consistent with mmdetection's own release-asset naming convention (an independent internal check, not a claim about the naming scheme being a security guarantee).",
+      "destination": "huggingface/mm_grounding_dino/grounding_dino_swin-b_pretrain_obj365_goldg_v3de-f83eef00.pth",
+      "profiles": [
+        "research",
+        "full-data",
+        "hpc"
+      ],
+      "extract": {
+        "method": "none"
+      },
+      "producer": null,
+      "deprecated": {
+        "is_deprecated": false,
+        "reason": null,
+        "superseded_by": null
+      }
+    },
+    {
+      "id": "weights.mm_grounding_dino.swin-l_pretrain_obj365_goldg",
+      "version": "1.0.0",
+      "purpose": "MM-Grounding-DINO pretrained checkpoint, used as load_from init weights for LLMDet detector training configs.",
+      "owner": {
+        "branch": "A",
+        "config": "LLMDet/configs/grounding_dino_swin_swin-l.py load_from"
+      },
+      "type": "model_weights",
+      "source": {
+        "kind": "http",
+        "url": "https://download.openmmlab.com/mmdetection/v3.0/mm_grounding_dino/grounding_dino_swin-l_pretrain_obj365_goldg/grounding_dino_swin-l_pretrain_obj365_goldg-34dcdc53.pth"
+      },
+      "upstream": {
+        "repo": "https://github.com/open-mmlab/mmdetection/tree/main/configs/mm_grounding_dino",
+        "ref": null,
+        "note": "Exact URL already documented in LLMDet/README.md SS'Prepare Grounding-DINO checkpoints'; not independently rediscovered here."
+      },
+      "license": {
+        "spdx": "Apache-2.0",
+        "note": "Verified in [internal notes, not included]; same LICENSE as mmdetection. Weight provenance caveat: trained on Objects365/GoldG/GRIT/V3Det with no separate weight license stated by the release -- code permitted, weight provenance is the field-standard caveat, not a hard blocker (see LICENSE_AUDIT.md SS1 MM-Grounding-DINO row)."
+      },
+      "redistribution": {
+        "permitted": "yes",
+        "note": "Apache-2.0 code license; standard open-vocab-detection weight-provenance caveat noted above. Not mirrored by this project; recipe only."
+      },
+      "status": "public",
+      "bytes": 1517035659,
+      "sha256": "34dcdc535a0eb020deda881fe8b4c49b324defe764d85f94d8282fb287cd0208",
+      "verified": true,
+      "verification_note": "sha256 computed locally from the file already present at huggingface/mm_grounding_dino/grounding_dino_swin-l_pretrain_obj365_goldg-34dcdc53.pth; Content-Length cross-checked live via HEAD against download.openmmlab.com on 2026-08-09 and matches exactly. The filename's trailing 8 hex characters (34dcdc53) match the head of the computed sha256, consistent with mmdetection's own release-asset naming convention (an independent internal check, not a claim about the naming scheme being a security guarantee).",
+      "destination": "huggingface/mm_grounding_dino/grounding_dino_swin-l_pretrain_obj365_goldg-34dcdc53.pth",
+      "profiles": [
+        "research",
+        "full-data",
+        "hpc"
+      ],
+      "extract": {
+        "method": "none"
+      },
+      "producer": null,
+      "deprecated": {
+        "is_deprecated": false,
+        "reason": null,
+        "superseded_by": null
+      }
+    },
+    {
+      "id": "checkpoint.mstcn_553_ff_s42",
+      "version": "1.0.0",
+      "purpose": "DEPLOYED temporal cue classifier. MS-TCN, 553_facefound feature config (base-552 + face_found flag), seed 42. This is the model LLMDet/configs/attention_runtime.yaml:86 (temporal_checkpoint) actually loads for the live dashboard. Validation macro-F1 0.4913 +/- 0.0208 (3 seeds, attention/thesis_eval).",
+      "owner": {
+        "branch": "B",
+        "config": "LLMDet/configs/attention_runtime.yaml:86 temporal_checkpoint"
+      },
+      "type": "project_checkpoint",
+      "source": {
+        "kind": "unpublished",
+        "note": "Exists only in this working tree today (LLMDet/work_dirs/thesis/ff_det/mstcn_553_ff_s42/checkpoints/best.pth); no public release asset has been created yet. Run 'python tools/artifacts/upload.py publish --id checkpoint.mstcn_553_ff_s42 --backend <github|hf|zenodo>' to create one; that will populate a real source.url here."
+      },
+      "upstream": {
+        "repo": null,
+        "ref": null,
+        "note": "Project-generated, not vendored from an upstream project. Training code (independent MS-TCN reimplementation) is licensed under this repo's own terms; [internal notes, not included] MS-TCN row for why this is not the Commons-Clause-restricted official ms-tcn code."
+      },
+      "license": {
+        "spdx": "LicenseRef-repo-default (no top-level LICENSE file exists yet -- [internal notes, not included] SS2 point 1)",
+        "note": "Flagged, not resolved, by this doc; add a root LICENSE before public release."
+      },
+      "redistribution": {
+        "permitted": "pending_ethics_review",
+        "note": "Trained on features derived from grounding_data/llmstu_sequences_full_det, which is itself derived from the restricted LLMSTU classroom video corpus [internal notes, not included] RISK 1). The checkpoint's own weights are an aggregate statistical object (2.7M parameters trained on 4,390 sequences across 127 videos) and RELEASE_RISK_REGISTER.md does not flag model weights as a re-identification risk in the way it flags the raw per-frame annotation JSONLs -- but releasing anything trained on this corpus still inherits RISK 1's open question of whether the underlying data collection has a documented ethical/legal basis at all. This is recorded as pending, not decided, here."
+      },
+      "status": "manual",
+      "bytes": 10886518,
+      "sha256": "714485556fcfe54cbaa264eee16e7f0b4365374b4010574c86ba8647e2b3296b",
+      "verified": true,
+      "verification_note": "sha256 computed directly from the file on disk on 2026-08-09; no download involved.",
+      "destination": "LLMDet/work_dirs/thesis/ff_det/mstcn_553_ff_s42/checkpoints/best.pth",
+      "profiles": [
+        "demo",
+        "research",
+        "full-data",
+        "hpc"
+      ],
+      "extract": {
+        "method": "none"
+      },
+      "producer": "Regenerate via LLMDet/attention/thesis_eval/launch_sweep.py --sweep ff_det --sequence-root ../grounding_data/llmstu_sequences_full_det --out-root work_dirs/thesis/ff_det (selects experiment_id=mstcn_553_ff_s42, seed 42 internally). Exact frozen hyperparameters and training curve are recorded in LLMDet/work_dirs/thesis/ff_det/mstcn_553_ff_s42/run_record.json (git commit 13c3deb25a0dad971c0362c66c8b66e5951e9f1c, dirty=true). GPU training, not bit-reproducible across hardware/CUDA versions -- re-running will match the reported macro-F1 within seed-noise, not byte-for-byte.",
+      "deprecated": {
+        "is_deprecated": false,
+        "reason": null,
+        "superseded_by": null
+      }
+    },
+    {
+      "id": "checkpoint.asrf_556_hp_s43",
+      "version": "1.0.0",
+      "purpose": "Architecture-sweep comparison checkpoint. ASRF, 556_hp feature config (base-552 + full head-pose block: yaw/pitch/roll/face_found), seed 43. NOT the deployed model -- shown in the dashboard's model-comparison dropdown (tools/dashboard/model_registry.py, 'arch' sweep) alongside the deployed mstcn_553_ff_s42.",
+      "owner": {
+        "branch": "B",
+        "config": "tools/dashboard/model_registry.py (arch sweep scan of LLMDet/work_dirs/thesis/)"
+      },
+      "type": "project_checkpoint",
+      "source": {
+        "kind": "unpublished",
+        "note": "Exists only in this working tree today (LLMDet/work_dirs/thesis/arch/asrf_556_hp_s43/checkpoints/best.pth); no public release asset created yet. Same publish path as checkpoint.mstcn_553_ff_s42."
+      },
+      "upstream": {
+        "repo": null,
+        "ref": null,
+        "note": "Project-generated, independent ASRF reimplementation [internal notes, not included] ASRF row: from-scratch code, MIT would have permitted copying regardless)."
+      },
+      "license": {
+        "spdx": "LicenseRef-repo-default (no top-level LICENSE file exists yet)",
+        "note": "Same flag as checkpoint.mstcn_553_ff_s42."
+      },
+      "redistribution": {
+        "permitted": "pending_ethics_review",
+        "note": "Trained on grounding_data/llmstu_sequences_full (restricted corpus, RISK 1). Same reasoning as checkpoint.mstcn_553_ff_s42 -- not individually flagged by RELEASE_RISK_REGISTER.md as a re-identification risk, but inherits RISK 1's open ethics question."
+      },
+      "status": "manual",
+      "bytes": 18830424,
+      "sha256": "b070f38b44ed13c25565e3bd61ad5a72a9b4933911794fe417bc1535873f7d53",
+      "verified": true,
+      "verification_note": "sha256 computed directly from the file on disk on 2026-08-09; no download involved.",
+      "destination": "LLMDet/work_dirs/thesis/arch/asrf_556_hp_s43/checkpoints/best.pth",
+      "profiles": [
+        "research",
+        "full-data",
+        "hpc"
+      ],
+      "extract": {
+        "method": "none"
+      },
+      "producer": "Regenerate via LLMDet/attention/thesis_eval/launch_sweep.py --sweep arch --sequence-root ../grounding_data/llmstu_sequences_full --out-root work_dirs/thesis/arch (selects experiment_id=asrf_556_hp_s43, seed 43 internally). Frozen spec/history in LLMDet/work_dirs/thesis/arch/asrf_556_hp_s43/run_record.json (git commit bb8fe0c6bd9f30d86e9ae747a29c88bea9e2b12f, dirty=true). GPU training, not bit-reproducible; re-running matches within seed-noise.",
+      "deprecated": {
+        "is_deprecated": false,
+        "reason": null,
+        "superseded_by": null
+      }
+    },
+    {
+      "id": "config.mstcn_553_ff_thresholds",
+      "version": "1.0.0",
+      "purpose": "Frozen calibration: softmax temperature (T=0.9236) and the two abstention thresholds (display>=0.46, alert>=0.66) for checkpoint.mstcn_553_ff_s42, fitted on the validation split. Required by LLMDet/configs/attention_runtime.yaml:96 (calibration) for the dashboard to show calibrated confidence and gate sustained-episode alerts.",
+      "owner": {
+        "branch": "C",
+        "config": "LLMDet/configs/attention_runtime.yaml:96 calibration"
+      },
+      "type": "config_file",
+      "source": {
+        "kind": "unpublished",
+        "note": "Ships alongside checkpoint.mstcn_553_ff_s42; same publish path."
+      },
+      "upstream": {
+        "repo": null,
+        "ref": null,
+        "note": "Project-generated."
+      },
+      "license": {
+        "spdx": "LicenseRef-repo-default",
+        "note": null
+      },
+      "redistribution": {
+        "permitted": "pending_ethics_review",
+        "note": "Fitted on the restricted validation split's predictions; same RISK-1 caveat as its parent checkpoint, though this file itself carries no per-student data, only two scalars and a temperature."
+      },
+      "status": "manual",
+      "bytes": 804,
+      "sha256": "40b7acca3e62804936f3705a441e83ab8eb63b2ed26d04ad1e4486e0dec05582",
+      "verified": true,
+      "verification_note": "sha256 computed directly from the file on disk on 2026-08-09.",
+      "destination": "LLMDet/work_dirs/thesis/runtime/mstcn_553_ff_thresholds.json",
+      "profiles": [
+        "demo",
+        "research",
+        "full-data",
+        "hpc"
+      ],
+      "extract": {
+        "method": "none"
+      },
+      "producer": "Regenerate via attention/thesis_eval/calibrate.py against checkpoint.mstcn_553_ff_s42 on the validation split (temperature scaling + threshold search); [internal notes, not included] calibration section for the exact invocation and the coverage/accuracy trade-off table.",
+      "deprecated": {
+        "is_deprecated": false,
+        "reason": null,
+        "superseded_by": null
+      }
+    },
+    {
+      "id": "checkpoint.detector_main_llmstu_exact_iter25000",
+      "version": "1.0.0",
+      "purpose": "The LLMDet/Grounding-DINO student detector actually cited by LLMDet/configs/attention_runtime.yaml:48 (detector.checkpoint_path). Required for the 'research'/'full-data'/'hpc' profiles (running a fresh video through the live pipeline); NOT required for 'demo' (session replay of an already-precomputed session needs no detector).",
+      "owner": {
+        "branch": "A",
+        "config": "LLMDet/configs/attention_runtime.yaml:48 detector.checkpoint_path; LLMDet/configs/student_llmstu_exact.py"
+      },
+      "type": "project_checkpoint",
+      "source": {
+        "kind": "unpublished",
+        "note": "Exists only in this working tree (LLMDet/work_dirs/thesis_bundle/checkpoints/main_llmstu_exact_iter25000_final.pth); no public release asset exists."
+      },
+      "upstream": {
+        "repo": null,
+        "ref": null,
+        "note": "Fine-tuned from the MM-Grounding-DINO Swin-T init weights (weights.mm_grounding_dino.swin-t_pretrain_obj365_goldg_grit9m_v3det) on the restricted LLMSTU corpus."
+      },
+      "license": {
+        "spdx": "LicenseRef-repo-default",
+        "note": "Same top-level-LICENSE gap as every project-generated artifact."
+      },
+      "redistribution": {
+        "permitted": "pending_ethics_review",
+        "note": "Unlike the temporal-model checkpoints above, this is a detector FINE-TUNED DIRECTLY on frames of the restricted LLMSTU classroom video -- a materially closer derivative of the identifiable footage than an aggregate temporal classifier trained on abstracted per-track features. Treat this as at least as gated as RISK 1, likely more so; do not publish without an explicit institutional determination that covers derivative model weights, not only the raw video/annotations."
+      },
+      "status": "restricted",
+      "bytes": 4292433054,
+      "sha256": "332e8ec2f08dd201e75633f4db5ad743df3df85b67609bc00d89b6f86c23d8a3",
+      "verified": true,
+      "verification_note": "sha256 computed directly from the file on disk on 2026-08-09 (4.29 GB, local read only -- no network download was performed or is needed to obtain this hash).",
+      "destination": "LLMDet/work_dirs/thesis_bundle/checkpoints/main_llmstu_exact_iter25000_final.pth",
+      "profiles": [
+        "research",
+        "full-data",
+        "hpc"
+      ],
+      "extract": {
+        "method": "none"
+      },
+      "producer": "Regenerate via LLMDet/tools/train.py configs/student_llmstu_exact.py (iter_25000, selected as 'final' -- see LLMDet/work_dirs/thesis_bundle/ checkpoints/main_llmstu_exact_iter22500_bestR1.pth for the best-Recall@1 checkpoint from the same run instead). Requires the restricted LLMSTU training data and splits.json; not runnable from public artifacts alone.",
+      "deprecated": {
+        "is_deprecated": false,
+        "reason": null,
+        "superseded_by": null
+      }
+    },
+    {
+      "id": "data.llmstu_restricted_corpus",
+      "version": "1.0.0",
+      "purpose": "Placeholder pointer to the full restricted LLMSTU dataset tree (raw video-derived crops, sequence feature caches, splits, gold annotations) that everything above other than the CLIP/mediapipe/mm-grounding-dino/6DRepNet360 public weights ultimately depends on for training or full re-evaluation.",
+      "owner": {
+        "branch": "A,B,C",
+        "config": "grounding_data/LLMSTU, grounding_data/llmstu_sequences*, grounding_data/llmstu_tools/outputs/*, event_gold_bundle/*, gold_annotation_bundle*"
+      },
+      "type": "dataset_dir",
+      "source": {
+        "kind": "manual",
+        "note": "No download URL exists or should exist for this corpus. See docs/branch_c/ARTIFACT_MANIFEST.json for the full per-file/per-directory inventory (487 artifacts, sizes, sha256 where computed) produced by the Data/Evaluation agent's read-only audit."
+      },
+      "upstream": {
+        "repo": null,
+        "ref": null,
+        "note": null
+      },
+      "license": {
+        "spdx": null,
+        "note": "Not applicable -- this is institutional research data, not third-party licensed software/weights."
+      },
+      "redistribution": {
+        "permitted": "no",
+        "note": "Raw identifiable classroom video and any per-student crop/annotation derived from it are not intended for public redistribution under any scenario this project contemplates (THESIS_PLAN.md's caption-neutralisation is an ethics measure for *research reuse*, not a public-release mechanism). Independent of that policy, [internal notes, not included] RISK 1 finds no documented ethics/consent basis exists yet for the underlying data collection at all -- this blocks the project's publication independent of this file's own redistribution policy."
+      },
+      "status": "restricted",
+      "bytes": null,
+      "sha256": null,
+      "verified": false,
+      "verification_note": "Directory-level; no single hash applies. Per-file hashes for the parts that have them are in docs/branch_c/ARTIFACT_MANIFEST.json, not duplicated here.",
+      "destination": "grounding_data/ (multiple subdirectories; see ARTIFACT_MANIFEST.json)",
+      "profiles": [
+        "full-data",
+        "hpc"
+      ],
+      "extract": {
+        "method": "none"
+      },
+      "producer": "[internal notes, not included] and grounding_data/llmstu_tools/README.md for the full data-prep pipeline (strip_labels -> recover_video_ids -> build_seat_tracks -> dedup_subsample -> make_splits -> regen_odvg -> sample_gold_candidates).",
+      "deprecated": {
+        "is_deprecated": false,
+        "reason": null,
+        "superseded_by": null
+      }
+    }
+  ]
+}

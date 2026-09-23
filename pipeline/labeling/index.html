@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>LLMSTU — Golden Eval Labeler</title>
+<style>
+  :root{--bg:#0f1115;--panel:#171a21;--line:#2a2f3a;--fg:#e6e8ec;--mut:#9aa3b2;
+        --acc:#5b8cff;--good:#37b26b;--warn:#e0a33a;}
+  *{box-sizing:border-box}
+  body{margin:0;font:14px/1.45 system-ui,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--fg)}
+  header{display:flex;gap:12px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--bg);z-index:5}
+  header h1{font-size:15px;margin:0;font-weight:600}
+  header .sp{flex:1}
+  button{background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:7px 12px;cursor:pointer;font:inherit}
+  button:hover{border-color:var(--acc)}
+  button.primary{background:var(--acc);border-color:var(--acc);color:#fff}
+  button.good{background:var(--good);border-color:var(--good);color:#fff}
+  .wrap{display:grid;grid-template-columns:minmax(320px,1fr) 420px;gap:0;height:calc(100vh - 53px)}
+  .imgcol{display:flex;align-items:center;justify-content:center;background:#000;overflow:auto}
+  .imgcol img{max-width:100%;max-height:100%;image-rendering:auto}
+  .form{padding:16px 18px;overflow:auto;border-left:1px solid var(--line);background:var(--panel)}
+  .row{margin-bottom:12px}
+  .row label{display:block;color:var(--mut);margin-bottom:4px;font-size:12px;text-transform:uppercase;letter-spacing:.03em}
+  select,input[type=text]{width:100%;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:7px;padding:7px 8px;font:inherit}
+  .chg select,.chg input{border-color:var(--warn)}
+  .pill{display:inline-block;font-size:11px;color:var(--mut);margin-left:6px}
+  .toggle{display:flex;gap:8px;align-items:center}
+  .toggle input{width:18px;height:18px}
+  .bar{height:4px;background:var(--line)}
+  .bar>div{height:100%;background:var(--good);width:0}
+  .meta{font-size:12px;color:var(--mut);margin:2px 0 10px}
+  .foot{display:flex;gap:8px;margin-top:14px}
+  kbd{background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:1px 5px;font-size:11px}
+  #drop{margin:auto;text-align:center;color:var(--mut);max-width:420px}
+</style>
+</head>
+<body>
+<header>
+  <h1>LLMSTU · Golden Eval Labeler</h1>
+  <span id="counter" class="pill"></span>
+  <span class="sp"></span>
+  <button id="prev">← Prev</button>
+  <button id="next" class="primary">Next →</button>
+  <button id="loadProg">Load progress</button>
+  <button id="clearAll">Reset progress</button>
+  <button id="export" class="good">Export golden.json</button>
+  <input type="file" id="progFile" accept="application/json" style="display:none"/>
+</header>
+<div class="bar"><div id="progbar"></div></div>
+
+<div class="wrap" id="app" style="display:none">
+  <div class="imgcol"><img id="crop" alt="crop"/></div>
+  <div class="form">
+    <div class="meta" id="meta"></div>
+    <div id="fields"></div>
+    <div class="foot">
+      <button id="reset">Reset to model</button>
+      <button id="verified" class="good">✓ Verified (agrees w/ model)</button>
+    </div>
+    <p class="meta" style="margin-top:14px">
+      Shortcuts: <kbd>←</kbd>/<kbd>→</kbd> prev/next · <kbd>v</kbd> verified ·
+      changed fields are outlined amber. Progress auto-saves in this browser.
+    </p>
+  </div>
+</div>
+
+<div id="drop" class="wrap" style="display:flex">
+  <div>
+    <h2>Load your sample</h2>
+    <p>Run <code>scripts/03_sample_eval.py</code> to generate <code>data.json</code>,
+       then serve this folder (<code>python -m http.server</code>) and open
+       <code>index.html</code> — it will auto-load <code>data.json</code>.</p>
+    <p>Or drop a <code>data.json</code> here:</p>
+    <input type="file" id="file" accept="application/json"/>
+  </div>
+</div>
+
+<script>
+const state={items:[],fields:null,idx:0,labels:{}};
+const $=s=>document.querySelector(s);
+
+function saveKey(){
+  // key on the ACTUAL crop set (not just its length) so different data.json files
+  // never share saved progress.
+  const items=state.items||[];
+  const sig=items.map(it=>it.crop_path||it.id).join('|');
+  let h=0; for(let i=0;i<sig.length;i++){h=((h<<5)-h+sig.charCodeAt(i))|0;}
+  return 'llmstu_golden_'+items.length+'_'+(h>>>0);
+}
+function persist(){localStorage.setItem(saveKey(),JSON.stringify(state.labels));}
+function restore(){try{state.labels=JSON.parse(localStorage.getItem(saveKey()))||{}}catch(e){state.labels={}}}
+
+function load(data){
+  state.items=data.items||[];
+  state.fields=data.fields;
+  restore();
+  $('#drop').style.display='none';
+  $('#app').style.display='grid';
+  buildForm();
+  render();
+}
+
+function buildForm(){
+  const box=$('#fields');box.innerHTML='';
+  for(const [name,spec] of Object.entries(state.fields)){
+    const row=document.createElement('div');row.className='row';
+    const lab=document.createElement('label');lab.textContent=name.replace(/_/g,' ');
+    row.appendChild(lab);
+    let el;
+    if(spec.type==='enum'){
+      el=document.createElement('select');
+      for(const v of spec.values){const o=document.createElement('option');o.value=v;o.textContent=v;el.appendChild(o);}
+    }else if(spec.type==='bool'){
+      const t=document.createElement('div');t.className='toggle';
+      el=document.createElement('input');el.type='checkbox';
+      const sp=document.createElement('span');sp.textContent=spec.help||'';sp.style.color='var(--mut)';sp.style.fontSize='12px';
+      t.appendChild(el);t.appendChild(sp);row.appendChild(t);
+    }else{
+      el=document.createElement('input');el.type='text';
+    }
+    if(spec.type!=='bool')row.appendChild(el);
+    el.dataset.field=name;
+    el.addEventListener('change',()=>onEdit(name));
+    box.appendChild(row);
+  }
+}
+
+function current(){return state.items[state.idx];}
+function curLabel(){
+  const it=current();
+  if(!state.labels[it.id]) state.labels[it.id]=Object.assign({},it.pseudo,{_status:'unseen'});
+  return state.labels[it.id];
+}
+
+function render(){
+  const it=current(),lab=curLabel();
+  $('#crop').src=it.image;
+  $('#counter').textContent=`${state.idx+1} / ${state.items.length}`;
+  const done=Object.values(state.labels).filter(l=>l._status&&l._status!=='unseen').length;
+  $('#progbar').style.width=(100*done/state.items.length)+'%';
+  $('#meta').innerHTML=`id ${it.id} · <span class="pill">model conf: ${it.model_confidence??'?'}</span>`
+    +` · status: <b>${lab._status}</b>`;
+  for(const [name,spec] of Object.entries(state.fields)){
+    const el=document.querySelector(`[data-field="${name}"]`);
+    if(spec.type==='bool')el.checked=!!lab[name];
+    else el.value=lab[name]??'';
+    const row=el.closest('.row');
+    row.classList.toggle('chg', String(lab[name])!==String(it.pseudo[name]));
+  }
+}
+
+function onEdit(name){
+  const it=current(),lab=curLabel();
+  const el=document.querySelector(`[data-field="${name}"]`);
+  const spec=state.fields[name];
+  lab[name]=spec.type==='bool'?el.checked:el.value;
+  lab._status='edited';
+  persist();render();
+}
+
+function go(d){state.idx=Math.max(0,Math.min(state.items.length-1,state.idx+d));render();}
+$('#next').onclick=()=>go(1);
+$('#prev').onclick=()=>go(-1);
+$('#reset').onclick=()=>{const it=current();state.labels[it.id]=Object.assign({},it.pseudo,{_status:'unseen'});persist();render();};
+$('#verified').onclick=()=>{curLabel()._status='verified';persist();go(1);};
+document.addEventListener('keydown',e=>{
+  if(e.target.tagName==='INPUT'&&e.target.type==='text')return;
+  if(e.key==='ArrowRight')go(1);
+  else if(e.key==='ArrowLeft')go(-1);
+  else if(e.key==='v'){curLabel()._status='verified';persist();go(1);}
+});
+
+$('#export').onclick=()=>{
+  const out=state.items.map(it=>({
+    id:it.id,crop_path:it.crop_path,group:it.group||'representative',
+    pseudo:it.pseudo,
+    golden:Object.fromEntries(Object.entries(state.labels[it.id]||it.pseudo)
+             .filter(([k])=>k!=='_status')),
+    status:(state.labels[it.id]||{})._status||'unseen'
+  }));
+  const blob=new Blob([JSON.stringify({items:out},null,1)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='golden.json';a.click();
+};
+
+$('#clearAll').onclick=()=>{
+  if(!confirm('Clear all saved labels for THIS crop set and start fresh?'))return;
+  localStorage.removeItem(saveKey());state.labels={};render();
+};
+// resume from a previously exported golden.json (merge its labels back in by id)
+$('#loadProg').onclick=()=>$('#progFile').click();
+$('#progFile').onchange=e=>{const f=e.target.files[0];if(!f)return;
+  f.text().then(t=>{
+    let g; try{g=JSON.parse(t)}catch(_){alert('Not valid JSON');return;}
+    const items=g.items||g; const byId={}; items.forEach(it=>{if(it&&it.id!=null)byId[it.id]=it;});
+    let n=0;
+    state.items.forEach(it=>{const gi=byId[it.id];if(!gi)return;
+      const gold=gi.golden||gi.pseudo||{};
+      state.labels[it.id]=Object.assign({},gold,{_status:gi.status||'edited'});n++;});
+    persist();render();
+    alert('Loaded progress for '+n+' crops.');
+  });};
+$('#file').onchange=e=>{const f=e.target.files[0];if(!f)return;
+  f.text().then(t=>load(JSON.parse(t)));};
+// try to auto-load data.json sitting next to this file
+fetch('data.json').then(r=>r.ok?r.json():Promise.reject()).then(load).catch(()=>{});
+</script>
+</body>
+</html>

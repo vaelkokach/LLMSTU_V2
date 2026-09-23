@@ -1,0 +1,13 @@
+# Phase 1 (session replay + model switching). Mirrors the `demo` extra in
+# pyproject.toml, which is pinned to what the reference box actually runs.
+#
+# torch is the CPU wheel on purpose: the temporal models are small and this
+# path never touches the detector, so a GPU buys nothing here and a CUDA wheel
+# would multiply image size and cold-start time. Phase 2 changes this.
+--extra-index-url https://download.pytorch.org/whl/cpu
+numpy==1.26.4
+torch==2.2.2
+opencv-python-headless==4.11.0.86
+PyYAML==6.0.1
+Pillow==10.3.0
+huggingface_hub>=0.35.0

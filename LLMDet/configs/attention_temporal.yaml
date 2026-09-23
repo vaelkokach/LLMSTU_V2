@@ -1,0 +1,134 @@
+# =====================================================================
+# SUPERSEDED — historical ablation config. DO NOT USE FOR DEPLOYMENT.
+#
+# Deployment now uses configs/attention_runtime.yaml (MS-TCN, 556-dim,
+# (measured value removed from the handover copy)
+#
+# This file is kept only so the historic 552/556/570 ladder stays
+# re-runnable. Its checkpoint was trained on the sequence builder's OWN
+# 102/25 video split, which overlaps the detector's test split on 23 of
+# 27 videos, so nothing it produces is a test number.
+#
+# `temporal_checkpoint` below was corrected on 2026-08-01: all three
+# configs in this family pointed at the 552-dim attention_temporal_v2
+# checkpoint regardless of their own `input_dim`. In the live path that
+# raised a size mismatch inside a bare `except`, which printed one line
+# and then ran the dashboard on a RANDOMLY INITIALISED network.
+# =====================================================================
+seed: 42
+
+# Detector updated 2026-07-31 (P0.2). Three separate corrections:
+#  1. CHECKPOINT: was pointing at grounding_dino_swin_t_student_e1/iter_9000,
+# (measured value removed from the handover copy)
+# (measured value removed from the handover copy)
+#  2. PROMPT: "student" appears in 0 of 36,339 fine-tuning captions, so it is
+#     out of distribution for the fine-tuned head and scores low. Swept over
+#     generic anchors on the final checkpoint; "a student sitting" won.
+#  3. THRESHOLD: 0.45 was inherited from the pre-fine-tuning model. Measured on
+# (measured value removed from the handover copy)
+# (measured value removed from the handover copy)
+#     Branch B only sees students the detector returns, so the old setting
+#     silently starved the entire cue pipeline.
+# Evidence: work_dirs/probe/threshold_sweep_iter25000.json
+# NOTE: the prompt must stay GENERIC. Content prompts ("using laptop") score
+# higher aggregate F1 by naming the majority activity while missing the
+# off-task minorities the system exists to detect.
+detector:
+  config_path: "configs/student_llmstu_exact.py"
+  checkpoint_path: "work_dirs/thesis_bundle/checkpoints/main_llmstu_exact_iter25000_final.pth"
+  text_prompt: "a student sitting"
+  score_thr: 0.10
+  max_det: 80
+  min_rel_area: 0.01
+  max_rel_area: 0.55
+  min_aspect_ratio: 0.20
+  max_aspect_ratio: 1.20
+  nms_iou_thr: 0.45
+  device: "cuda:0"
+
+# Dual-detector verification. Disabled: the previous setup pointed primary
+# and verifier at the SAME config/checkpoint/prompt, so every 3rd frame ran
+# the identical model twice and IoU-filtered its own output against itself —
+# pure latency cost, no filtering benefit. Re-enable only with a genuinely
+# different verifier model.
+hybrid:
+  enabled: false
+  verify_every_n_frames: 3
+  verify_iou_thr: 0.25
+  primary_detector:
+    config_path: "configs/student_llmstu_exact.py"
+    checkpoint_path: "work_dirs/thesis_bundle/checkpoints/main_llmstu_exact_iter25000_final.pth"
+    score_thr: 0.10
+    max_det: 120
+    device: "cuda:0"
+    text_prompt: "a student sitting"
+    class_whitelist: []
+
+tracking:
+  iou_match_thr: 0.15
+  max_age: 45
+  min_hits: 8
+  appearance_weight: 0.45
+  min_match_score: 0.35
+
+features:
+  clip_model_name: "openai/clip-vit-base-patch32"
+  device: "cuda:0"
+
+model:
+  # 512 CLIP + 8 bbox geom + 24 color stats + 8 posture geom
+  input_dim: 552
+  hidden_dim: 512
+  num_layers: 4
+  num_heads: 8
+  dropout: 0.1
+  # 7 visible-cue classes, see attention/TAXONOMY.md
+  num_classes: 6
+  max_seq_len: 128
+  per_frame: true
+
+data:
+  sequence_dir: "../grounding_data/llmstu_sequences"
+
+training:
+  mode: "supervised" # supervised | semi_supervised
+  pseudo_label_threshold: 0.7
+  use_class_weights: true
+  enforce_full_class_coverage: true
+  required_min_per_class: 1
+  epochs: 90
+  batch_size: 32
+  num_workers: 4
+  lr: 0.0003
+  weight_decay: 0.01
+  grad_clip: 1.0
+  amp: true
+  output_dir: "work_dirs/attention_temporal_v2"
+
+rule_baseline:
+  window_s: 10.0
+  on_task_majority: 0.5
+  looking_away_s: 5.0
+  head_down_s: 20.0
+  min_history_s: 3.0
+  uncertain_max_frac: 0.5
+
+events:
+  min_duration_s: 3.0
+  max_gap_s: 2.0
+  return_confirm_s: 5.0
+  iou_thr: 0.3
+  per_channel_min_duration:
+    phone_use: 2.0
+    head_down: 5.0
+
+inference:
+  window_size: 32
+  min_frames_for_pred: 10
+  label_smooth_window: 3
+  label_switch_margin: 0
+
+privacy:
+  anonymize_faces: false
+
+temporal_checkpoint: "work_dirs/attention_temporal_v2/checkpoints/best.pth"

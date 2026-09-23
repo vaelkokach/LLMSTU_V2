@@ -1,0 +1,126 @@
+================================================================================
+ ENABLING THE LIVE WEBCAM ON THE HPC DASHBOARD  (Windows)
+================================================================================
+
+THE DASHBOARD URL (everything except the webcam works here already):
+
+    http://10.147.10.21:1300/proxy/8010/
+
+Keep the trailing slash.
+
+
+WHY A FLAG IS NEEDED
+--------------------
+Browsers only allow webcam access from a "secure context": HTTPS, or localhost.
+The dashboard is served over plain HTTP at 10.147.10.21, which is neither, so
+Chrome blocks the camera -- silently, which is why the button seems to do
+nothing. Both methods below tell Chrome to treat this one address as secure.
+
+Nothing else is affected, and both are reversible.
+
+
+================================================================================
+ METHOD 1 -- NO COMMAND LINE  (easiest, recommended)
+================================================================================
+
+1. In Chrome, open this address:
+
+chrome://flags/#unsafely-treat-insecure-origin-as-secure
+
+2. In the text box next to that flag, paste exactly:
+
+http://10.147.10.21:1300
+
+3. Change the dropdown from "Disabled" to "Enabled".
+
+4. Click the "Relaunch" button that appears at the bottom.
+
+5. Chrome restarts (it reopens your tabs). Now open:
+
+http://10.147.10.21:1300/proxy/8010/
+
+6. Click "Start camera". Chrome should now ask for permission to use the
+   webcam. Click Allow.
+
+TO UNDO: go back to chrome://flags, set that flag to "Disabled", Relaunch.
+
+
+================================================================================
+ METHOD 2 -- COMMAND LINE  (separate Chrome window, leaves your normal one alone)
+================================================================================
+
+Open the Start menu, type  cmd  , press Enter, then paste ONE of the lines below
+(right-click pastes in a Command Prompt window; Ctrl+V also works on Windows 11).
+
+If Chrome is installed normally (64-bit), use this line:
+
+"C:\Program Files\Google\Chrome\Application\chrome.exe" --unsafely-treat-insecure-origin-as-secure=http://10.147.10.21:1300 --user-data-dir="%TEMP%\chrome-cam" http://10.147.10.21:1300/proxy/8010/
+
+If that says the path cannot be found, try this one (32-bit install):
+
+"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe" --unsafely-treat-insecure-origin-as-secure=http://10.147.10.21:1300 --user-data-dir="%TEMP%\chrome-cam" http://10.147.10.21:1300/proxy/8010/
+
+And if that also fails, Chrome may be installed per-user:
+
+"%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe" --unsafely-treat-insecure-origin-as-secure=http://10.147.10.21:1300 --user-data-dir="%TEMP%\chrome-cam" http://10.147.10.21:1300/proxy/8010/
+
+In PowerShell instead of cmd, put  &  in front of the whole line:
+
+& "C:\Program Files\Google\Chrome\Application\chrome.exe" --unsafely-treat-insecure-origin-as-secure=http://10.147.10.21:1300 --user-data-dir="$env:TEMP\chrome-cam" http://10.147.10.21:1300/proxy/8010/
+
+
+DO I HAVE TO CLOSE MY OTHER CHROME TABS FIRST?
+----------------------------------------------
+No. --user-data-dir starts a SEPARATE Chrome profile, which is exactly what
+lets this run alongside your normal browser. Your existing windows and tabs are
+untouched.
+
+Two things to expect from that separate window:
+  * It is a fresh profile -- no bookmarks, no extensions, not signed in. Normal.
+  * It only has the flag while launched this way. Closing it changes nothing.
+
+IF THE CAMERA IS STILL BLOCKED after Method 2, Chrome reused your existing
+instance and ignored the flags. In that case close Chrome fully -- including any
+leftover chrome.exe in Task Manager (Ctrl+Shift+Esc) -- and run the line again.
+Or just use Method 1, which cannot have this problem.
+
+TO UNDO: close that window. You can also delete the folder it created:
+  %TEMP%\chrome-cam
+
+
+================================================================================
+ CHECKING IT WORKED
+================================================================================
+
+The address bar should show:  http://10.147.10.21:1300/proxy/8010/
+
+* Page loads, header shows a model name, and the status is NOT "disconnected"
+  -> the dashboard is reachable. (This already works without any flag.)
+
+* Click "Start camera" and Chrome asks permission for the webcam
+  -> the flag worked.
+
+* Nothing happens when you click "Start camera", no permission prompt
+  -> the flag did not take effect; see the note above, or use Method 1.
+
+First analysed frame takes about 30-60 seconds from a cold start: the detector,
+CLIP and the head-pose model all have to load. The panel says "warming up" while
+that happens -- watch the "analysed" counter, not "skipped".
+
+
+================================================================================
+ IF THE PAGE ITSELF DOES NOT LOAD
+================================================================================
+
+* "Could not list recordings: HTTP 404"
+  -> the trailing slash is missing. Use .../proxy/8010/ not .../proxy/8010
+
+* Browser spins forever
+  -> you used https://. There is no HTTPS on port 1300. Use http://
+
+* "This site can't be reached"
+  -> the dashboard is not running on the HPC. In a JupyterLab terminal:
+        cd /home/jovyan/Computer_vision
+        python tools/serve_hpc.py
+     To stop it:
+        python tools/serve_hpc.py --stop

@@ -1,0 +1,61 @@
+# Tuning experiments. Edit freely, then run:
+#   python scripts/05_tune_crops.py     --frames <dir> --n-frames 8
+#   python scripts/06_tune_captions.py  --crops  <dir> --n-crops 24
+#
+# Each variant is a partial override of the crop/caption config.
+
+crop_variants:
+  - name: tight_head
+    crop_mode: head_wide
+    head_frac: 0.45
+    margin_frac: 0.20
+  - name: default_head_wide
+    crop_mode: head_wide
+    head_frac: 0.55
+    margin_frac: 0.35
+  - name: wide_context
+    crop_mode: head_wide
+    head_frac: 0.60
+    margin_frac: 0.55
+  - name: upper_body
+    crop_mode: upper_body
+    margin_frac: 0.25
+  # recall vs speed of the detector also matters:
+  - name: default_head_wide_bigdet
+    crop_mode: head_wide
+    detector_model: yolo11l.pt
+    conf: 0.30
+
+caption_variants:
+  # Compare prompt wording (same model). load_in_4bit: false to MATCH the 95GB
+  # bf16 production config -> tuning labels reflect what the final run will produce.
+  - name: p_structured
+    model_id: Qwen/Qwen3.5-27B
+    prompt_name: v1_structured
+    load_in_4bit: false
+  - name: p_concise
+    model_id: Qwen/Qwen3.5-27B
+    prompt_name: v2_concise
+    load_in_4bit: false
+  - name: p_reasoned
+    model_id: Qwen/Qwen3.5-27B
+    prompt_name: v3_reasoned
+    load_in_4bit: false
+  - name: p_fewshot
+    model_id: Qwen/Qwen3.5-27B
+    prompt_name: v4_fewshot
+    load_in_4bit: false
+
+# A/B different FIELD SETS (schema.SCHEMAS keys). Same model/prompt across them so
+# you compare the schema, not the wording. Run: python scripts/08_tune_schema.py
+schema_variants:
+  - name: s_full
+    schema: full
+    model_id: Qwen/Qwen3.5-27B
+    prompt_name: v1_structured
+    load_in_4bit: false
+  - name: s_no_attn_gaze_merged     # drops attention_target + merged gaze categories
+    schema: no_attn_gaze_merged
+    model_id: Qwen/Qwen3.5-27B
+    prompt_name: v1_structured
+    load_in_4bit: false

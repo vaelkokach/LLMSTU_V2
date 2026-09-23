@@ -1,0 +1,95 @@
+# DEPLOYMENT config — the model the thesis actually cites.
+#
+# Supersedes attention_temporal{,_hp,_full}.yaml for anything that runs live.
+# Those three remain only so the historic ablation is re-runnable; each now
+# carries a warning banner and a checkpoint that matches its own input_dim.
+#
+# Temporal model: MS-TCN, 556-dim features (base + head pose), seed 42.
+# (measured value removed from the handover copy)
+# (measured value removed from the handover copy)
+# (measured value removed from the handover copy)
+#
+# Why 556 and not 570 for deployment, beyond the ablation showing the extra 14
+# dims earn nothing [internal notes, not included]:
+#   * the 7 facial-expression dims need a second GPU model (ViT FER) per crop;
+#   * the 7 dynamic dims are computed **per track over a whole track** — fidget
+#     variance and a personalised median gaze baseline are not per-frame
+#     quantities, so a streaming path cannot produce them faithfully at all.
+# A 570-dim live config could therefore only ever be approximated, and the old
+# bridge "approximated" it by zero-padding. 556 is exactly what the live
+# extractor produces with the MediaPipe head-pose backend enabled: no padding,
+# no approximation.
+#
+# NOTE: model architecture and feature width are read from the CHECKPOINT's own
+# spec, not from this file. The `model:` block below is descriptive only. That
+# is deliberate — a YAML/checkpoint disagreement used to load a randomly
+# initialised network and print one line about it.
+
+seed: 42
+
+detector:
+  config_path: "configs/student_llmstu_exact.py"
+  checkpoint_path: "work_dirs/thesis_bundle/checkpoints/main_llmstu_exact_iter25000_final.pth"
+  text_prompt: "a student sitting"
+  score_thr: 0.10
+  max_det: 80
+  min_rel_area: 0.01
+  max_rel_area: 0.55
+  min_aspect_ratio: 0.20
+  max_aspect_ratio: 1.20
+  nms_iou_thr: 0.45
+  device: "cuda:0"
+
+hybrid:
+  enabled: false
+
+tracking:
+  iou_match_thr: 0.15
+  max_age: 45
+  min_hits: 8
+  appearance_weight: 0.45
+  min_match_score: 0.35
+
+features:
+  clip_model_name: "openai/clip-vit-base-patch32"
+  device: "cuda:0"
+  # Required: the 556-dim model expects the 4 head-pose dims. The bridge asserts
+  # the resulting width against the checkpoint and refuses to pad.
+  head_pose_backend: "mediapipe"
+
+# Descriptive only — see the note above.
+model:
+  described_input_dim: 556
+  num_classes: 6
+  max_seq_len: 128
+  per_frame: true
+
+temporal_checkpoint: "work_dirs/thesis/arch/mstcn_556_hp_s42/checkpoints/best.pth"
+
+# Temperature and both abstention thresholds, fitted on the VALIDATION split and
+# frozen (attention/thesis_eval/runtime.py):
+# (measured value removed from the handover copy)
+# (measured value removed from the handover copy)
+# (measured value removed from the handover copy)
+# Below the display threshold the UI shows `uncertain`; below the alert
+# threshold no sustained-episode alert may fire. Raw predictions are recorded
+# either way, so abstention never destroys evidence.
+calibration: "work_dirs/thesis/runtime/mstcn_556_thresholds.json"
+
+events:
+  min_duration_s: 3.0
+  max_gap_s: 1.0          # 1.0 gives the same recall at ~17% fewer false alerts
+  return_confirm_s: 5.0
+  iou_thr: 0.3
+  per_channel_min_duration:
+    phone_use: 2.0
+    head_down: 5.0
+
+inference:
+  window_size: 32
+  min_frames_for_pred: 10
+  label_smooth_window: 3
+  label_switch_margin: 0
+
+privacy:
+  anonymize_faces: false

@@ -1,0 +1,72 @@
+# Phase 2 — the `research` extra from pyproject.toml, minus mmcv (installed
+# after this file, from OpenMMLab's wheel index).
+#
+
+# opencv is the headless build: the pinned opencv-python pulls GUI libraries
+# that cannot load in a container without a display.
+# Torch is installed FIRST and from the cu121 index (see Dockerfile), and mmcv's
+# compiled _ext is built against that exact build. Re-stating the pins here is
+# what stops pip from replacing it: any requirement below that declares a torch
+# dependency -- timm did -- leaves the resolver free to pull a newer torch from
+# PyPI, and the very next thing that happens is
+#     mmcv/_ext...so: undefined symbol: _ZN3c104cuda9SetDeviceEi
+# `==2.2.2` is satisfied by the installed `2.2.2+cu121` (PEP 440 local version),
+# so this pins without forcing a reinstall from the wrong index.
+torch==2.2.2
+torchvision==0.17.2
+
+numpy==1.26.4
+opencv-python-headless==4.11.0.86
+PyYAML==6.0.1
+Pillow==10.3.0
+# 4.45 is the first release with AutoModelForImageTextToText and the Qwen2-VL
+# classes, which is what the VLM second opinion needs. It is the SMALLEST bump
+# that unblocks it -- Qwen3-VL would need 4.57.
+#
+# The pin it replaces was load-bearing, so the two build checks below it are the
+# safety net rather than an afterthought: `import mmcv._ext` catches the
+# `undefined symbol: _ZN3c104cuda9SetDeviceEi` that a dragged-forward torch
+# produces, and `register_all_modules()` + importing grounding_dino catches the
+# vendored tree failing to load. If either breaks, the BUILD fails and the Space
+# keeps serving the previous image.
+#
+# torch==2.2.2 above is what stops the resolver moving torch to satisfy this.
+transformers==4.45.2
+mediapipe==1.0.0
+mmengine==0.10.7
+
+# Prerequisites of the VENDORED LLMDet/mmdet tree. mmdet itself is never
+# pip-installed — it ships in the repo — but its import chain needs these, and
+# without them `import mmdet` fails with ModuleNotFoundError.
+addict==2.4.0
+matplotlib==3.8.4
+pycocotools==2.0.10
+shapely==2.1.1
+six==1.16.0
+terminaltables==3.1.10
+yapf==0.43.0
+
+# Also prerequisites of the vendored tree, and all four are imported
+# unguarded at module level, so a missing one is a hard ImportError rather
+# than a degraded feature:
+#   scipy      mmdet.models.task_modules.assigners.hungarian_assigner
+#   fairscale  mmdet.models.detectors.grounding_dino  <- the detector itself
+#   tqdm       mmdet.datasets.api_wrappers.cocoeval_mp
+#   rich       mmdet.apis.det_inferencer
+# tqdm and rich do arrive transitively today (via transformers and mmengine),
+# but that is incidental. Naming them keeps a dependency bump from removing a
+# module this tree imports directly.
+scipy==1.13.1
+fairscale==0.4.13
+tqdm==4.66.4
+rich==13.7.1
+
+# Vendored LLMDet/ram (Recognize Anything) is reachable from the detector:
+# grounding_dino -> llava -> multimodal_encoder -> `from ram.models import
+# ram_plus`. Its ram.models.utils imports .vit, which needs timm's pre-1.0
+# module layout (timm.models.registry / .layers / .helpers).
+# Not needed: `clip`, imported by ram/utils/openset_utils.py, is only reachable
+# through the ram.utils package, which nothing on this path imports.
+timm==0.9.16
+
+huggingface_hub>=0.35.0

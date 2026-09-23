@@ -1,0 +1,67 @@
+# LLMSTU enhancement pipeline config.
+# Every value here can also be overridden with env vars (see llmstu/config.py).
+
+crop:
+  detector_model: yolo11l.pt   # big card -> larger detector for better recall
+  conf: 0.35
+  iou: 0.6
+  imgsz: 1280                  # frames are wide-angle rooms; keep this high
+  crop_mode: upper_body         # head_wide | upper_body | person
+  head_frac: 0.55              # top fraction of the person box kept as head+shoulders
+  margin_frac: 0.25            # context padding around the face crop
+  min_side_px: 48              # drop tiny/far students
+  max_per_frame: 60
+  out_size: 512                # bigger crops = more facial detail (VRAM/compute to spare)
+  # --- pose-based, quality-gated cropping (fixes headless/bad crops + pixelation) ---
+  use_pose: true               # crop from head keypoints -> every crop contains a face/head
+  pose_model: yolo11l-pose.pt  # big card -> large pose model for better recall
+  down_extend: 2.5             # extend crop DOWN (x head span) to show hands/desk/phone
+                               #   raise to 3.5-4 for more torso/desk (capped at the person's box)
+  kpt_conf: 0.35               # min keypoint confidence
+  min_head_kpts: 1             # require >=1 head keypoint (nose/eyes/ears)
+  min_face_kpts: 2             # PIXELATION-unrelated: require >=2 FACE kpts (nose/eyes) ->
+                               #   drops faces occluded behind monitors (3 = stricter, 0 = off)
+  min_native_px: 120           # PIXELATION knob: min head span in ORIGINAL px (raise to 140-160 = stricter)
+  blur_min_var: 40.0           # drop crops blurrier/softer than this (raise = stricter; 0 disables)
+#mode=upper_body head_frac=0.55 margin=0.25 det=yolo11l.pt conf=0.35  ·  90 crops from 8 frames (avg 11.2/frame)
+caption:
+  # Tuned for a single ~95GB GPU (H100 NVL / GH200 class).
+  # Qwen3.5 = natively multimodal; weights run ON the GPU (no inference API).
+  # 27B in bf16 ~= 54GB, leaving ~40GB for big batches -> NO 4-bit needed.
+  model_id: Qwen/Qwen3.5-27B
+  backend: transformers  # vLLM needs CUDA 13 (Colab is CUDA 12) -> use transformers on Colab
+  dtype: bfloat16
+  load_in_4bit: false            # keep false on 95GB: full bf16 is higher quality + faster
+  attn_implementation: sdpa      # sdpa works on Colab cu12 (flash-attn build is too slow)
+  prompt_name: v2_concise     # v1_structured | v2_concise | v3_reasoned | v4_fewshot
+  enable_thinking: false         # false = skip <think> so the model emits JSON directly
+  max_new_tokens: 512            # headroom in case the model still reasons a little
+  batch_size: 48                 # big batches recover throughput without vLLM; push 64 if VRAM allows
+  max_pixels: 802816             # = 1024*28*28; >512px crop area, so 512 crops stay full
+  temperature: 0.0
+  vllm_gpu_mem_util: 0.82        # let vLLM use most of the 95GB
+  vllm_max_num_seqs: 128         # high concurrency on a big card
+
+data:
+  source_repo: CHANGE_ME/your-frames-dataset
+  source_subdir: frames
+  crops_repo: CHANGE_ME/your-crops-dataset
+  workdir: ./work
+  frames_glob: "**/*.jpg"
+
+dedup:
+  hamming_threshold: 6    # dHash distance below which same-seat crops = duplicate (4 gentle, 8-10 aggressive)
+  cell_px: 64             # seat-region grid size (px) for grouping crops in space
+  hash_size: 8            # dHash resolution
+
+eval:
+  n_samples: 1500         # final golden set size (1.5-2k gives ~2.5% margin of error)
+  stratify_by: engagement_level
+  seed: 13
+
+
+#tight_head
+#mode=head_wide head_frac=0.45 margin=0.2 det=yolo11l.pt conf=0.35  ·  88 crops from 8 frames (avg 11.0/frame)
+
+#upper_body # startin with this one
+#mode=upper_body head_frac=0.55 margin=0.25 det=yolo11l.pt conf=0.35  ·  90 crops from 8 frames (avg 11.2/frame)

@@ -1,0 +1,118 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "llmstu-cv"
+version = "0.1.0"
+description = "LLMSTU thesis codebase (Branches A/B/C) -- classroom student-attention detection, tracking, temporal cue classification, and the review dashboard."
+readme = "docs/REPRODUCIBILITY.md"
+requires-python = ">=3.11,<3.12"
+license = { text = "UNLICENSED -- no top-level LICENSE file exists yet; [internal notes, not included] for the pre-release plan (Apache-2.0 recommended, matching LLMDet/LICENSE)." }
+
+# ---------------------------------------------------------------------------
+# Core runtime dependencies.
+#
+# This is the set actually imported by the CHEAPEST GPU-free runtime path:
+# `tools/dashboard/server.py` serving the UI + replaying an already-precomputed
+# session (tools/dashboard/session_replay.py) and running the deployed temporal
+# checkpoint (LLMDet/attention/temporal_model.py, thesis_eval/models.py) on CPU.
+# Verified against the live box on 2026-08-09 [internal notes, not included]
+# SS4): `python3 -c "import numpy; print(numpy.__version__)"` etc.
+#
+# Versions are pinned to what is ACTUALLY INSTALLED and exercised on the
+# reference box, not to upstream's stated recommendation -- notably numpy
+# 1.26.4 here runs against LLMDet's own upstream README, which asks for
+# numpy<1.24. That mismatch has not produced an observed failure (no failure
+# was ever exercised in the audit), but it is a real, unresolved compatibility
+# gap, not a clean bill of health. See ENVIRONMENT_AUDIT.md SS1.
+#
+# torch is pinned to the base version (2.2.2) rather than the exact local
+# build (2.2.2+cu121) because the +cu121 local version segment is only
+# resolvable via PyTorch's own CUDA wheel index, not plain PyPI. A CPU-only
+# install of plain torch==2.2.2 is sufficient for every code path that does
+# not need a GPU (session replay, temporal-model inference); GPU users should
+# instead follow https://pytorch.org/get-started/locally/ for a CUDA 12.1
+# build and then treat this pin as a floor, not a recipe.
+# ---------------------------------------------------------------------------
+dependencies = [
+    "numpy==1.26.4",
+    "torch==2.2.2",
+]
+
+[project.optional-dependencies]
+# `demo` -- everything server.py's full (non-replay) code paths need to run
+# the deployed temporal model over a precomputed feature session and render
+# it, still with NO detector / NO mediapipe / NO transformers. Matches
+# `bootstrap.py --profile demo`.
+demo = [
+    "opencv-python==4.11.0.86",
+    "PyYAML==6.0.1",
+    "Pillow==10.3.0",
+]
+
+# `research` -- the full live pipeline: detector inference, CLIP appearance
+# features, and the MediaPipe head-pose/face backends. Matches
+# `bootstrap.py --profile research` and `--profile full-data`. Includes
+# everything in `demo`.
+#
+# addict/matplotlib/pycocotools/shapely/six/terminaltables/yapf below are NOT
+# mmdet itself (see the big note at the bottom of this file for why mmdet is
+# never declared) -- they are the VENDORED LLMDet/mmdet/ tree's own runtime
+# prerequisites (its `import` chain: LLMDet/attention/detector_adapter.py ->
+# mmdet.apis.inference -> ... -> these). Without them, `import mmdet` against
+# the vendored copy fails with ModuleNotFoundError even though mmdet itself
+# is never pip-installed. Versions pinned to what is actually installed and
+# exercised on the reference box (2026-08-09).
+research = [
+    "opencv-python==4.11.0.86",
+    "PyYAML==6.0.1",
+    "Pillow==10.3.0",
+    "transformers==4.44.2",
+    "mediapipe==1.0.0",
+    "mmcv==2.2.0",
+    "mmengine==0.10.7",
+    "addict==2.4.0",
+    "matplotlib==3.8.4",
+    "pycocotools==2.0.10",
+    "shapely==2.1.1",
+    "six==1.16.0",
+    "terminaltables==3.1.10",
+    "yapf==0.43.0",
+]
+
+# `train` -- training-only scripts (LLMDet/attention/train_temporal_ddp.py's
+# average_precision_score usage). Not needed for inference or the dashboard.
+train = [
+    "scikit-learn==1.5.0",
+]
+
+[tool.setuptools]
+py-modules = []
+
+# ---------------------------------------------------------------------------
+# Why `mmdet` is absent from every list above
+# ---------------------------------------------------------------------------
+# mmdet is NOT pip-installed anywhere on the reference box and is not declared
+# here on purpose. It resolves exclusively via `sys.path.insert(0, LLMDet/)`
+# onto the VENDORED copy tracked at LLMDet/mmdet/ (version 3.3.0, locally
+# patched in 4 files -- [internal notes, not included] SS5). Declaring
+# `mmdet==3.3.0` here would be actively misleading: `pip install mmdet==3.3.0`
+# would fetch the unpatched upstream package and shadow or conflict with the
+# vendored, patched copy the detector code actually depends on. Anyone running
+# the detector path must run from a working directory where `LLMDet/` is on
+# `sys.path` (every entry point in `tools/dashboard/` and `LLMDet/tools/`
+# already does this insertion itself) rather than `pip install`-ing mmdet at
+# all. `mmcv`/`mmengine`/`addict`/`matplotlib`/`pycocotools`/`shapely`/`six`/
+# `terminaltables`/`yapf` ARE declared, in `[research]` above -- but as the
+# vendored copy's own prerequisites, pinned to what makes `import mmdet`
+# against LLMDet/mmdet/ actually succeed on the reference box, not as a
+# statement that this project depends on "mmdet" as a package name.
+#
+# `ultralytics` (AGPL-3.0) and any GPL-3.0 component (e.g. DirectMHP) are
+# intentionally never declared here, in any extra, under any circumstance --
+# [internal notes, not included] SS2 for why: AGPL's network-use clause
+# would obligate disclosing the complete source of this whole combined
+# Apache-2.0-adjacent codebase to anyone who merely uses a served dashboard.
+# If a contributor ever adds either, CI's dependency scan (.github/workflows/
+# ci.yml) is the last line of defense, but the real control is: don't.

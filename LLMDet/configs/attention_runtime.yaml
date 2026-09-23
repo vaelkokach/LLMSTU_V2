@@ -1,0 +1,257 @@
+# DEPLOYMENT config — the model the thesis actually cites.
+#
+# 2026-08-01: switched from the FaceLandmarker mesh to a plain BlazeFace
+# DETECTOR for the `face_found` bit, and from 556 to the 553_facefound feature
+# config. Rationale and evidence in [internal notes, not included]:
+#   * ~80% of the head-pose block's value is the flag, not the angles (11.10),
+# (measured value removed from the handover copy)
+#   * the mesh cost 74.9 ms/frame against the detector's 47.2 (1,200 frames);
+#   * downstream accuracy is a statistical tie: detector-553 vs the previous
+# (measured value removed from the handover copy)
+#   * end-to-end this buys +30% FPS at a real scene (2.84 -> 3.69) and cuts p95
+#     latency 434 -> 296 ms.
+# The previous configuration is kept runnable as attention_runtime_landmarker.yaml.
+#
+# Supersedes attention_temporal{,_hp,_full}.yaml for anything that runs live.
+# Those three remain only so the historic ablation is re-runnable; each now
+# carries a warning banner and a checkpoint that matches its own input_dim.
+#
+# Temporal model: MS-TCN, 553_facefound features (base + face_found), seed 42.
+# (measured value removed from the handover copy)
+# For reference, on the same evaluator:
+# (measured value removed from the handover copy)
+# (measured value removed from the handover copy)
+# (measured value removed from the handover copy)
+# effect; this config's change from 556-landmarker to 553-detector is a
+# statistical tie bought for +30% FPS.
+#
+# Why 556 and not 570 for deployment, beyond the ablation showing the extra 14
+# dims earn nothing [internal notes, not included]:
+#   * the 7 facial-expression dims need a second GPU model (ViT FER) per crop;
+#   * the 7 dynamic dims are computed **per track over a whole track** — fidget
+#     variance and a personalised median gaze baseline are not per-frame
+#     quantities, so a streaming path cannot produce them faithfully at all.
+# A 570-dim live config could therefore only ever be approximated, and the old
+# bridge "approximated" it by zero-padding. 556 is exactly what the live
+# extractor produces with the MediaPipe head-pose backend enabled: no padding,
+# no approximation.
+#
+# NOTE: model architecture and feature width are read from the CHECKPOINT's own
+# spec, not from this file. The `model:` block below is descriptive only. That
+# is deliberate — a YAML/checkpoint disagreement used to load a randomly
+# initialised network and print one line about it.
+
+seed: 42
+
+detector:
+  config_path: "configs/student_llmstu_exact.py"
+  checkpoint_path: "work_dirs/thesis_bundle/checkpoints/main_llmstu_exact_iter25000_final.pth"
+  text_prompt: "a student sitting"
+  score_thr: 0.10
+  max_det: 80
+  # The geometric filters run AFTER the detector and were rejecting real
+  # students. Measured against the 15,241 student boxes of the LLMSTU pregold
+  # run (Data_Pipeline/LLMSTU-pipeline/Record runs/Last_pregold_/
+  # crops_manifest.jsonl, 1,459 frames at 2812x1050, a median 11 students per
+  # frame):
+  #
+  #   min_rel_area   students rejected        aspect w/h     rejected
+  # (measured value removed from the handover copy)
+  # (measured value removed from the handover copy)
+  # (measured value removed from the handover copy)
+  # (measured value removed from the handover copy)
+  #
+  # On the Space's demo session the smallest student it DID keep sat at 1.08%
+  # of the frame, just over the old floor. Lowering the floors admits more small
+  # false positives too; score_thr and the tracker's min_hits are what hold
+  # (measured value removed from the handover copy)
+  # be suppressed, at 0.60 none do. The boxes come from the pipeline's person
+  # detector, not human annotation. No retraining is involved: these only
+  # decide which of the detector's boxes are kept.
+  min_rel_area: 0.002
+  max_rel_area: 0.55
+  min_aspect_ratio: 0.20
+  max_aspect_ratio: 1.50
+  nms_iou_thr: 0.60
+  device: "cuda:0"
+
+#: A SECOND, pretrained open-vocabulary detector, run only when the selected
+#: checkpoint reads the object block (`1080_hp_head_obj`). Deliberately not the
+#: fine-tuned student detector: that one ignores its text prompt entirely
+#: [internal notes, not included], so prompting it for "cell phone" returns students. It is also
+#: not filtered like the student detector -- min_rel_area 0.01 and an aspect
+#: ratio floor of 0.20 would reject a phone outright.
+object_detector:
+  # The `_deploy` variant: same detector, no LMM. predict() never reads it,
+  # so the boxes are identical, and constructing it costs a 0.5B model plus a
+  # 3.5 GB SigLIP read that is discarded -- which on a 16 GB Space is the
+  # difference between loading and swapping.
+  config_path: "configs/grounding_dino_swin_t_original_deploy.py"
+  checkpoint_path: "../huggingface/mm_grounding_dino/grounding_dino_swin-t_pretrain_obj365_goldg_grit9m_v3det_20231204_095047-b448804b.pth"
+  prompts: ["cell phone", "laptop"]
+  min_score: 0.05
+
+hybrid:
+  enabled: false
+
+tracking:
+  iou_match_thr: 0.15
+  max_age: 45
+  min_hits: 8
+  appearance_weight: 0.45
+  min_match_score: 0.35
+
+features:
+  clip_model_name: "openai/clip-vit-base-patch32"
+  device: "cuda:0"
+  # BlazeFace full-range detector: emits [0, 0, 0, face_found]. The extractor
+  # still produces 556 columns; the 553_facefound checkpoint SELECTS base +
+  # column 555 inside predict_window, so the three zeroed angle columns are
+  # never fed to the model. The bridge asserts the extractor width and refuses
+  # to pad.
+  head_pose_backend: "mediapipe_detector"
+
+# Descriptive only — see the note above.
+model:
+  described_input_dim: 553
+  num_classes: 6
+  max_seq_len: 128
+  per_frame: true
+
+temporal_checkpoint: "work_dirs/thesis/ff_det/mstcn_553_ff_s42/checkpoints/best.pth"
+
+# Temperature and both abstention thresholds, fitted on the VALIDATION split and
+# frozen (attention/thesis_eval/runtime.py):
+# (measured value removed from the handover copy)
+# (measured value removed from the handover copy)
+# (measured value removed from the handover copy)
+# Below the display threshold the UI shows `uncertain`; below the alert
+# threshold no sustained-episode alert may fire. Raw predictions are recorded
+# either way, so abstention never destroys evidence.
+calibration: "work_dirs/thesis/runtime/mstcn_553_ff_thresholds.json"
+
+events:
+  min_duration_s: 3.0
+  max_gap_s: 1.0          # 1.0 gives the same recall at ~17% fewer false alerts
+  return_confirm_s: 5.0
+  iou_thr: 0.3
+  per_channel_min_duration:
+    phone_use: 2.0
+    head_down: 5.0
+
+inference:
+  # Detector and temporal striding (2026-08-03). The detector was 45% of the
+  # (measured value removed from the handover copy)
+  # diagonal over 115 LLMSTU tracks — so re-detecting every frame buys little.
+  # Between detections the tracker coasts on the last boxes (IoUTracker.coast,
+  # which deliberately does not age tracks on frames it never looked at), and
+  # `min_hits` is rescaled by the stride so confirmation still takes ~10 real
+  # frames rather than 8 * stride.
+  #
+  # Verified by replaying 0325.mp4 at each setting and comparing per-frame cues
+  # against stride 1, matching students across runs by box overlap
+  # (tools/verify_stride_equivalence.py, 600 frames):
+  #
+  #   det:tmp   FPS    p50      cue agreement   track coverage
+  #   1:1       3.69   270.7ms  100%  (ref)     100%
+  # (measured value removed from the handover copy)
+  # (measured value removed from the handover copy)
+  # (measured value removed from the handover copy)
+  #
+  # (measured value removed from the handover copy)
+  # available and nearly doubles throughput; it is not the default because an
+  # instructor-facing alert should prefer fidelity when neither option reaches
+  # a 10 fps budget anyway.
+  #
+  # CAVEAT: this improves throughput, not the tail. Detection frames still cost
+  # ~270 ms, so latency becomes bimodal — p50 falls 270.7 -> 157.6 ms while p95
+  # only moves 295.9 -> 291.7 ms.
+  detector_stride: 3
+  temporal_stride: 2
+  # 48, not 32. Measured on the val split the way deployment predicts --
+  # causal windows ending at the scored frame -- with every window scored on the
+  # SAME 907 positions, so the only difference is how much history each was
+  # allowed to see:
+  #
+  #   window   8    16     24     32(ref)  40      48
+  # (measured value removed from the handover copy)
+  # (measured value removed from the handover copy)
+  # (measured value removed from the handover copy)
+  #
+  # (measured value removed from the handover copy)
+  # (measured value removed from the handover copy)
+  # (tools/bench_context_length.py)
+  #
+  # 48 rather than more because that is roughly all the data supports: the
+  # training sequences have a MEDIAN length of 47 frames (p75 60), so a longer
+  # window would mostly be asking the model about context it never saw. The
+  # first version of this measurement let each window use the positions it could
+  # reach, which scored 64-frame windows on three frames and reported a macro-F1
+  # of 1.0; the common-position design is what makes the table above mean
+  # anything.
+  window_size: 48
+  # 3, not 10. At the trained 1 Hz this is SECONDS of history before a new
+  # student's first cue; 10 was chosen when history filled at 30 fps and cost
+  # 0.3 s. Measured on session 0325_full through the deployed
+  # ff_det/mstcn_553_facefound@s42, 218 positions over 7 tracks: the cue shown
+  # from only the last k samples against the model's own steady-state cue
+  # (up to 48 samples), since no labels exist off the HPC:
+  #
+  #   wait    agrees   shown but differs
+  # (measured value removed from the handover copy)
+  # (measured value removed from the handover copy)
+  # (measured value removed from the handover copy)
+  # (measured value removed from the handover copy)
+  # (measured value removed from the handover copy)
+  #
+  # Nothing is gained between 3 and 8 s, so 3 buys 7 s of cues per new student
+  # for ~7 points of agreement during that student's first 10 s only; after
+  # that the window is identical. One session: confirm on val with
+  # tools/bench_history_length.py when the HPC is back.
+  min_frames_for_pred: 3
+  # The rate at which frames enter a student's HISTORY, independent of how fast
+  # the detector runs. The model's receptive field is 32 frames; the LLMSTU
+  # (measured value removed from the handover copy)
+  # training window spans ~31 s of real time. Serving at any other rate rescales
+  # that window, and it costs more than any modelling change in this project:
+  #
+  #   served at   window spans   val macro-F1
+  # (measured value removed from the handover copy)
+  # (measured value removed from the handover copy)
+  # (measured value removed from the handover copy)
+  # (measured value removed from the handover copy)
+  #
+  # (tools/bench_framerate_skew.py; macro-F1 peaks AT the trained rate and falls
+  # away in both directions, so this is rate matching, not a repeated-frame
+  # artefact.) Raising the detector rate still buys smoother boxes and better
+  # tracking -- it just must not be allowed to rescale the model's window.
+  #
+  # 0 disables sampling and restores the old every-frame behaviour, for
+  # measurement only.
+  temporal_input_fps: 1.0
+  # Display smoothing. These steady what is DRAWN; the raw prediction, its
+  # confidence and the alert gate are untouched, so an alert still fires on what
+  # the model actually decided.
+  #
+  # They were 3 and 0, and at those values they do NOTHING. Measured on the live
+  # path over 400 frames of 0325.mp4, 2,310 student-frames, counting changes of
+  # the displayed cue:
+  #
+  #   window  margin   switches   vs unsmoothed
+  #        3       0        120            0%      <- the old setting
+  #        5       1         88          -27%
+  #        9       2         60          -50%      <- now
+  #
+  # 3 cannot work with temporal_stride 2: each prediction is held for two
+  # frames, so a window of three spans at most two distinct decisions and the
+  # majority vote just tracks its input. margin 0 disables the hysteresis
+  # entirely (the test is `< margin`, never true at 0).
+  #
+  # 9 frames is ~0.36 s at 25 fps -- the lag a genuine change now takes to
+  # appear, which is the price of halving the flicker. realtime_infer.py has
+  # used these same values since it was written; the dashboard was the outlier.
+  label_smooth_window: 9
+  label_switch_margin: 2
+
+privacy:
+  anonymize_faces: false

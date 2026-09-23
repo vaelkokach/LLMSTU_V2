@@ -1,0 +1,128 @@
+# Python
+__pycache__/
+*.pyc
+
+# Environments
+.venv/
+env/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Large ML files
+*.pt
+*.pth
+*.ckpt
+*.onnx
+
+# Data folders
+grounding_data/*
+!grounding_data/llmstu_tools/
+huggingface
+# Anchored: an unanchored `datasets/` matches at ANY depth and silently
+# excluded TWO vendored source directories from every clone --
+# LLMDet/mmdet/datasets/ (53 files) and LLMDet/configs/_base_/datasets/ --
+# which made the detector unimportable, then unbuildable, off this machine.
+# Guarded by LLMDet/attention/tests/test_vendored_tree_complete.py.
+#
+# A bare `data/` used to sit here and did it a THIRD time: it hid
+# LLMDet/ram/data/ (9 files -- ram/data/__init__.py, dataset.py,
+# randaugment.py, utils.py and the RAM tag lists). ram/models/ram.py,
+# ram_plus.py and tag2text.py all open `{CONFIG_PATH}/data/ram_tag_list.txt`
+# at construction, so a clone got FileNotFoundError the moment it built a RAM
+# tagger. It was redundant anyway -- LLMDet/data/ below is the path it meant.
+#
+# The data dirs these rules were meant to cover are named explicitly below.
+/datasets/
+LLMDet/data/
+LLMDet/datasets/
+
+# Logs / outputs
+logs/
+runs/
+outputs/
+
+# System
+.DS_Store
+
+
+
+# Run outputs & experiment artifacts (results JSONs force-added selectively)
+LLMDet/work_dirs/
+LLMDet/.dist_test/
+train_debug.log
+
+# Media / test assets
+*.mp4
+*.jfif
+tes*.jpg
+test*.jpg
+*.pkl
+*.npz
+
+# Archives & bundles
+*.tar.gz
+gold_annotation_bundle*
+
+# Dashboard session caches: derived from a video + the detector, ~100 MB each,
+# and rebuildable with tools/dashboard/precompute_session.py
+tools/dashboard/sessions/
+
+# Gold annotation outputs stay local until finalized
+tools/gold_annotator/gold_annotations_*.jsonl
+tools/gold_annotator/gold_events_*.jsonl
+# serve.py actually writes events_<name>.jsonl, not gold_events_<name>.jsonl.
+# The rule above never matched it. That gap is how event_gold_bundle/ ended
+# up tracked (RELEASE_RISK_REGISTER RISK 2); these files name real students.
+tools/gold_annotator/events_*.jsonl
+# Image bundles built by make_offline_bundle.py, wherever they land.
+gold_annotation_bundle_*/
+.claude/
+
+# External datasets (re-downloadable; CMOSE is 13.6 GB)
+grounding_data/external/
+grounding_data/llmstu_sequences_full_bp/
+grounding_data/llmstu_sequences_full_det/
+huggingface/mediapipe/*.tflite
+
+# Branch-C error-analysis crops: derived identifiable student media. Blurred, but
+# the filenames carry video id + seat + timestamp and the repo is public, so they
+# stay local. See FINDINGS 12.4 and docs/branch_c/RELEASE_RISK_REGISTER.md.
+outputs/branch_c/error_analysis/crops/
+
+# Transfer staging: multi-GB tarballs and raw session video moved by hand
+# between the HPC and the laptop. 5.9 GB as of 2026-09-10, including a 99 MB
+# classroom recording. Untracked AND unignored is how that gets committed by
+# accident, so it is named explicitly.
+results_v2/
+
+# Transfer staging. These arrive as tarballs extracted at the repo root and are
+# 1.4 GB together; `git add -A` swept them into a commit once and the push died.
+# The repo already ignores the 5.9 GB bundle dirs (91d362b); this is the same
+# class, and .gitignore has bitten this repo three times now.
+/*.tgz
+/llmstu_*.tar.gz
+/gold_*.tar.gz
+/event_gold_bundle_part*.tar.gz
+/cue_rules_v2.tar.gz
+
+# The dashboard-only venv (tools/serve_hpc.py --setup-vlm): a newer transformers
+# for the +vlm entries, inheriting torch/mmcv from the system environment.
+# Anchored with a leading slash -- an unanchored pattern has excluded vendored
+# source from this repo twice.
+/.venv-dashboard/
+
+# Runtime artefacts of tools/serve_hpc.py: a pid file, a log, and the derived
+# runtime yaml. All regenerated on every start.
+/tools/dashboard/.serve_hpc.pid
+/tools/dashboard/serve_hpc.log
+/tools/dashboard/_hpc_runtime.yaml
+
+# --- handover: your own data never goes in git ---
+recordings/
+*.mp4
+*.mkv
+*.avi
+format_sample/../crops/
+annotations/
+*.jsonl.bak

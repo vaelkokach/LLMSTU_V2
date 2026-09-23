@@ -1,0 +1,40 @@
+TERMS OF USE
+============
+
+Copyright (c) 2026 Vael Kokach.
+
+This software was written by Claude (Anthropic) for a master's thesis project and is
+made available to the bachelor graduation project group it was handed to, for the
+purpose of carrying out that project.
+
+Permission is granted to the members of that group, and to their academic supervisor,
+to use, copy, modify and build upon this software for the graduation project and for
+work published from it, provided that:
+
+  1. the origin of the software is stated in any report, thesis, presentation or
+     publication that uses it, together with the fact that it was written by Claude;
+  2. it is not redistributed publicly, or to anyone outside the project and its
+     supervision, without the copyright holder's written permission;
+  3. no student recording, crop, annotation or other personal data is distributed
+     with it, under any circumstances.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED.
+
+
+>>> The copyright holder should confirm these terms, or replace this file with the
+>>> licence agreed with the department, before the repository is shared.
+
+
+THIRD-PARTY COMPONENTS
+----------------------
+
+LLMDet/ is a vendored fork of LLMDet / MM-Grounding-DINO, built on MMDetection, and is
+licensed under the Apache License 2.0. Its licence text is at LLMDet/LICENSE and governs
+that directory regardless of the terms above.
+
+LLMDet/llava/ and LLMDet/ram/ are vendored from their respective upstream projects and
+keep their own licences.
+
+Model weights are not distributed with this repository. bootstrap.py prints the source
+and the licence of every artifact before fetching it; check each one against the use you
+intend.

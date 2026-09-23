@@ -1,0 +1,39 @@
+# Line-ending policy for hash-verified artifacts.
+#
+# artifacts.lock.json records a byte size and sha256 for every artifact it
+# manages. Git's core.autocrlf=true (the Windows default) rewrites LF to CRLF on
+# checkout, which changes those bytes and makes bootstrap.py report intact files
+# as corrupt. Observed on config.mstcn_553_ff_thresholds: 804 bytes on the
+# cluster, 818 in a Windows clone, byte-identical after normalising line endings
+# — the deployed model's frozen calibration reported INVALID for no real reason.
+#
+# `-text` disables end-of-line conversion so these check out byte-identical to
+# what was committed and hashed.
+#
+# Scoped deliberately to evidence paths. A blanket rule (e.g. *.jsonl) also
+# catches the vendored LLMDet/llava/ trees and makes 400+ unrelated files look
+# modified, which buries the artifacts this is meant to protect.
+
+# HPC evidence: metrics, tables, calibration, run records, predictions
+LLMDet/work_dirs/** -text
+
+# The lock itself
+artifacts.lock.json -text
+
+# Project data and annotations whose bytes are referenced or hashed
+event_gold_bundle/** -text
+grounding_data/** -text
+outputs/** -text
+reports/** -text
+
+# Binary artifacts: never convert, and do not attempt text diffs
+*.pth    -text -diff
+*.pt     -text -diff
+*.npz    -text -diff
+*.npy    -text -diff
+*.tflite -text -diff
+*.task   -text -diff
+
+# Shell scripts must keep LF or they fail on the cluster with
+# "/bin/bash^M: bad interpreter"
+*.sh text eol=lf

@@ -1,0 +1,96 @@
+name: ci
+
+# What this workflow covers, and what it deliberately does NOT:
+#
+#   COVERED on a standard hosted (CPU-only) runner:
+#     - installing the project from pyproject.toml
+#     - the CPU test suite under LLMDet/attention/tests (188 tests as of
+#       2026-08-09, plus the new tools/artifacts test_artifacts.py)
+#     - `bootstrap.py --profile demo --dry-run` (resolver logic sanity check,
+#       no network access needed for --dry-run)
+#     - artifacts.lock.json schema validation
+#     - a scan for hard-coded /home/jovyan absolute paths in committed
+#       runtime code/configs
+#
+#   NOT COVERED here, and how it IS covered instead:
+#     - GPU inference / CUDA correctness: hosted runners have no GPU. Covered
+#       by manual verification on the project's own GPU box before each
+#       release tag [internal notes, not included] and [internal notes, not included]
+#       for the CUDA/cuDNN/driver versions that were actually exercised).
+#     - Training convergence / reported thesis metrics: these require the
+#       restricted LLMSTU dataset (status=restricted in artifacts.lock.json)
+#       and are therefore never fetched or run in CI. Covered by the frozen
+#       run_record.json / eval_val/eval_test artifacts already checked into
+#       LLMDet/work_dirs/thesis/**, which this CI does not regenerate.
+#     - Real artifact downloads (mediapipe/mm-grounding-dino/6DRepNet360/CLIP):
+#       CI only dry-runs the resolver. A real `bootstrap.py --profile
+#       research` (no --dry-run) pulls several GB and is intentionally never
+#       run automatically on every push; run it by hand when validating a
+#       release.
+#
+#   KNOWN CURRENTLY-FAILING GATE (left failing on purpose, not a CI bug):
+#     The "no hard-coded /home/jovyan paths" job below is expected to FAIL
+#     against `main` as of 2026-08-09: [internal notes, not included]
+#     RISK 4 lists 6 files with hard-coded absolute-path defaults
+#     (LLMDet/matching/evaluate_matching.py, LLMDet/matching/
+#     run_matching_experiment.py, and four scripts under
+#     grounding_data/llmstu_tools/). This CI job exists to make that
+#     regression visible and to block it from getting worse, not to claim it
+#     is already fixed -- fixing those 6 files is outside this workflow's own
+#     scope (docs/REPRODUCIBILITY.md).
+
+on:
+  push:
+    branches: ["main", "branch-c/**"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install project (demo + research + train extras)
+        run: |
+          python -m pip install --upgrade pip
+          # `research` pulls in mmcv/mmengine/etc, the vendored LLMDet/mmdet
+          # tree's own prerequisites (see pyproject.toml's big comment) --
+          # needed because LLMDet/attention/detector_adapter.py imports
+          # mmdet unconditionally, and attention/tests/test_thesis_eval.py
+          # imports detector_adapter at module level.
+          pip install -e ".[demo,research,train]"
+
+      - name: Run the CPU test suite
+        working-directory: LLMDet
+        run: python -m pytest attention/tests -q
+
+      - name: bootstrap.py --profile demo --dry-run
+        run: python bootstrap.py --profile demo --dry-run
+
+      - name: Validate artifacts.lock.json schema
+        run: python -m tools.artifacts.download validate-schema
+
+      - name: Scan for hard-coded /home/jovyan paths in committed runtime code/configs
+        run: python tools/artifacts/ci_path_scan.py
+
+  dependency-license-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reject AGPL/GPL detector families if ever added
+        run: |
+          set -e
+          # [internal notes, not included] SS2: Ultralytics YOLO (AGPL-3.0) and
+          # DirectMHP (GPL-3.0) must never appear as a dependency of this
+          # project. This is a cheap, static, always-on tripwire -- it does not
+          # replace reading LICENSE_AUDIT.md before adding any new dependency.
+          if grep -riE '(^|[^a-z])(ultralytics|directmhp)([^a-z]|$)' pyproject.toml; then
+            echo "::error::Found a reference to a rejected AGPL/GPL dependency (ultralytics/DirectMHP) in pyproject.toml -- [internal notes, not included] SS2."
+            exit 1
+          fi
+          echo "OK: no rejected dependency names found in pyproject.toml."
