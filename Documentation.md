@@ -197,10 +197,17 @@ time, not afterwards.
 
 ### Stage 5 — training
 
+The temporal package imports itself as `attention.*`, so **`LLMDet/` is the import root**,
+not the repository root. Run it from inside that directory:
+
 ```bash
-python -m LLMDet.attention.thesis_eval.train --help
-python -m LLMDet.attention.thesis_eval.launch_sweep --help
+cd LLMDet
+python -m attention.thesis_eval.train --help
+python -m attention.thesis_eval.launch_sweep --help
 ```
+
+From anywhere else, `PYTHONPATH=/path/to/repo/LLMDet` does the same job. The detector's
+own entry points (`LLMDet/tools/`, `LLMDet/train.py`) are run from `LLMDet/` too.
 
 Read `LLMDet/attention/thesis_eval/data.py` first. It has two tables: `LAYOUTS`, which
 records what a built sequence file physically contains, and `FEATURE_CONFIGS`, which
@@ -266,6 +273,33 @@ A live camera needs a secure context: `getUserMedia` is silently refused on plai
 unless the origin is localhost. Either reach Jupyter over HTTPS, or tunnel it with
 `ssh -L 8888:localhost:8888 [USERNAME]@[HPC HOSTNAME]` so the origin becomes localhost.
 Uploading or replaying a recording works either way.
+
+### Getting this repository onto the HPC
+
+Work in **your own clone of this repository**, in your own directory on the box:
+
+```bash
+cd [/path/to/project]/[USERNAME]
+git clone https://github.com/vaelkokach/LLMSTU_V2.git
+cd LLMSTU_V2
+```
+
+GitHub is reachable from the container, so this works directly. Do not work inside anyone
+else's checkout — the original project's copy on that box contains its data and its
+unpublished results, and it is not yours to read or to modify.
+
+The clone you get is exactly the tree mapped out above, and the map stays accurate. What
+changes is that three directories appear as you work, none of which are in git and none of
+which should ever be committed:
+
+| appears when | what it is |
+|---|---|
+| `grounding_data/LLMSTU/crops/` | your crops, written by the pipeline, in shard subdirectories |
+| `huggingface/` | model weights, staged by `bootstrap.py` |
+| `LLMDet/work_dirs/` | training runs: checkpoints, logs and metrics, one directory per run |
+
+If a path in this document does not exist in your clone, it is one of those three, and it
+exists once you have run the stage that creates it.
 
 ### Getting the weights
 
